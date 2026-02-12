@@ -21,7 +21,7 @@ class ChurnCacheTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tmpDir = sys_get_temp_dir() . '/context-compiler-churn-test-' . uniqid();
+        $this->tmpDir = sys_get_temp_dir() . '/magecontext-churn-test-' . uniqid();
         mkdir($this->tmpDir, 0755, true);
 
         // Create a minimal git repo for cache commit detection

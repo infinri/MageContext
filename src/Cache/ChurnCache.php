@@ -8,7 +8,7 @@ namespace MageContext\Cache;
  * Repo-level churn cache.
  *
  * Cache key: HEAD commit + window_days + scopes hash.
- * Stored at {repoPath}/.context-compiler-cache/churn.json.
+ * Stored at {repoPath}/.magecontext-cache/churn.json.
  * Invalidated when HEAD changes or window changes.
  *
  * Stores both per-file churn (for GitChurnExtractor) and
@@ -23,7 +23,7 @@ class ChurnCache
     public function __construct(string $repoPath)
     {
         $this->repoPath = rtrim($repoPath, '/');
-        $this->cacheDir = $this->repoPath . '/.context-compiler-cache';
+        $this->cacheDir = $this->repoPath . '/.magecontext-cache';
         $this->cacheFile = $this->cacheDir . '/churn.json';
     }
 

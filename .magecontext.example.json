@@ -1,5 +1,5 @@
 {
-    "$comment": "Sample .context-compiler.json — copy to your repo root and customize.",
+    "$comment": "Sample .magecontext.json — copy to your repo root and customize.",
 
     "scopes": ["app/code", "app/design"],
     "include_vendor": false,

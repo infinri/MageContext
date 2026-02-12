@@ -22,7 +22,7 @@ class EdgeWeightFailureTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tmpDir = sys_get_temp_dir() . '/context-compiler-edge-weight-' . uniqid();
+        $this->tmpDir = sys_get_temp_dir() . '/magecontext-edge-weight-' . uniqid();
         mkdir($this->tmpDir, 0755, true);
     }
 

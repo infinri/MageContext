@@ -20,7 +20,7 @@ class DeterminismTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tmpDir = sys_get_temp_dir() . '/context-compiler-determinism-' . uniqid();
+        $this->tmpDir = sys_get_temp_dir() . '/magecontext-determinism-' . uniqid();
         mkdir($this->tmpDir, 0755, true);
     }
 

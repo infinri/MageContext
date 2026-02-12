@@ -23,7 +23,7 @@ class CorruptionTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tmpDir = sys_get_temp_dir() . '/context-compiler-test-' . uniqid();
+        $this->tmpDir = sys_get_temp_dir() . '/magecontext-test-' . uniqid();
         mkdir($this->tmpDir, 0755, true);
     }
 

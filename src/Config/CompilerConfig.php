@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace MageContext\Config;
 
 /**
- * Loads .context-compiler.json and provides merged configuration.
+ * Loads .magecontext.json and provides merged configuration.
  *
  * Spec §9: Config file with scope paths, edge types, thresholds,
  * include_vendor, max_evidence_per_edge.
@@ -22,7 +22,7 @@ class CompilerConfig
     }
 
     /**
-     * Load config from .context-compiler.json in the repo root, merged with defaults.
+     * Load config from .magecontext.json in the repo root, merged with defaults.
      */
     public static function load(string $repoPath, array $cliOverrides = []): self
     {
@@ -119,11 +119,11 @@ class CompilerConfig
     }
 
     /**
-     * Load config from .context-compiler.json file.
+     * Load config from .magecontext.json file.
      */
     private static function loadFile(string $repoPath): array
     {
-        $configPath = rtrim($repoPath, '/') . '/.context-compiler.json';
+        $configPath = rtrim($repoPath, '/') . '/.magecontext.json';
         if (!is_file($configPath)) {
             return [];
         }

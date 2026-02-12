@@ -1,4 +1,4 @@
-# Context Compiler
+# MageContext
 
 A CLI tool that indexes a Magento 2 repository via static analysis and outputs an AI-ready context bundle — structured, queryable, deterministic, and immediately usable by AI coding tools like Windsurf, Cursor, or Claude.
 
@@ -8,7 +8,7 @@ AI agents fail on enterprise Magento codebases not because the models are weak, 
 
 ## Solution
 
-Context Compiler runs 25 extractors across your repo and produces a self-describing context bundle:
+MageContext runs 25 extractors across your repo and produces a self-describing context bundle:
 
 - **Module graph** — modules, themes, composer packages, and their dependency edges
 - **Typed dependency graph** — structural, code, and runtime coupling with split metrics
@@ -37,8 +37,8 @@ composer require mage-context/compiler --dev
 For development:
 
 ```bash
-git clone <repo-url>
-cd context-compiler
+git clone https://github.com/infinri/MageContext.git
+cd MageContext
 composer install
 ```
 
@@ -46,19 +46,19 @@ composer install
 
 ```bash
 # Basic compile (auto-detects Magento, outputs to .ai-context/)
-bin/context-compiler compile --repo /path/to/magento
+bin/magecontext compile --repo /path/to/magento
 
 # Custom output directory
-bin/context-compiler compile --repo /path/to/magento --out /tmp/my-context
+bin/magecontext compile --repo /path/to/magento --out /tmp/my-context
 
 # Custom scopes (default: app/code,app/design)
-bin/context-compiler compile --repo /path/to/magento --scope app/code,vendor
+bin/magecontext compile --repo /path/to/magento --scope app/code,vendor
 
 # Faster local dev (skip determinism check, shorter churn window)
-bin/context-compiler compile --repo /path/to/magento --skip-determinism-check --churn-window 30
+bin/magecontext compile --repo /path/to/magento --skip-determinism-check --churn-window 30
 
 # Disable churn entirely (fastest)
-bin/context-compiler compile --repo /path/to/magento --churn-window 0
+bin/magecontext compile --repo /path/to/magento --churn-window 0
 ```
 
 ## CLI Options
@@ -162,7 +162,7 @@ All output is deterministic — same input always produces byte-identical output
 
 ## Configuration
 
-Place a `.context-compiler.json` in your repo root to customize behavior. See `.context-compiler.example.json` for all options.
+Place a `.magecontext.json` in your repo root to customize behavior. See `.magecontext.example.json` for all options.
 
 Key settings:
 
@@ -190,7 +190,7 @@ CLI options override config file values. Config file overrides defaults.
 ## CI Integration
 
 ```bash
-bin/context-compiler compile \
+bin/magecontext compile \
   --repo . \
   --ci \
   --max-violations 0 \
@@ -212,7 +212,7 @@ Exits non-zero if any threshold is exceeded. Writes `ci_summary.json` with pass/
 ```
 CLI (symfony/console)
   → CompileCommand
-    → CompilerConfig (.context-compiler.json + CLI overrides)
+    → CompilerConfig (.magecontext.json + CLI overrides)
     → TargetRegistry (auto-detect Magento vs generic)
     → ExtractorRegistry
       → 18 Magento extractors (XML, DI, plugins, events, routes, ...)

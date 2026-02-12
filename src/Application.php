@@ -12,7 +12,7 @@ use Symfony\Component\Console\Application as ConsoleApplication;
 
 class Application extends ConsoleApplication
 {
-    public const APP_NAME = 'context-compiler';
+    public const APP_NAME = 'magecontext';
     public const APP_VERSION = '0.1.0';
 
     public function __construct()

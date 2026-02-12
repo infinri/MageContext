@@ -10,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * D.3: Config wiring acceptance tests.
  *
- * Verifies that .context-compiler.json → CompilerConfig → accessors
+ * Verifies that .magecontext.json → CompilerConfig → accessors
  * work end-to-end, including defaults, file overrides, and CLI overrides.
  */
 class ConfigWiringTest extends TestCase
@@ -19,7 +19,7 @@ class ConfigWiringTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tmpDir = sys_get_temp_dir() . '/context-compiler-config-test-' . uniqid();
+        $this->tmpDir = sys_get_temp_dir() . '/magecontext-config-test-' . uniqid();
         mkdir($this->tmpDir, 0755, true);
     }
 
@@ -55,7 +55,7 @@ class ConfigWiringTest extends TestCase
 
     public function testConfigFileOverridesDefaults(): void
     {
-        file_put_contents($this->tmpDir . '/.context-compiler.json', json_encode([
+        file_put_contents($this->tmpDir . '/.magecontext.json', json_encode([
             'scopes' => ['app/code', 'vendor'],
             'include_vendor' => true,
             'max_evidence_per_edge' => 10,
@@ -77,7 +77,7 @@ class ConfigWiringTest extends TestCase
 
     public function testCliOverridesConfigFile(): void
     {
-        file_put_contents($this->tmpDir . '/.context-compiler.json', json_encode([
+        file_put_contents($this->tmpDir . '/.magecontext.json', json_encode([
             'churn' => [
                 'window_days' => 90,
                 'enabled' => true,
@@ -134,7 +134,7 @@ class ConfigWiringTest extends TestCase
 
     public function testInvalidConfigFileIgnored(): void
     {
-        file_put_contents($this->tmpDir . '/.context-compiler.json', 'not valid json');
+        file_put_contents($this->tmpDir . '/.magecontext.json', 'not valid json');
         $config = CompilerConfig::load($this->tmpDir);
 
         // Should fall back to defaults
@@ -155,7 +155,7 @@ class ConfigWiringTest extends TestCase
 
     public function testExampleConfigIsValidJson(): void
     {
-        $examplePath = __DIR__ . '/../../.context-compiler.example.json';
+        $examplePath = __DIR__ . '/../../.magecontext.example.json';
         $this->assertFileExists($examplePath);
 
         $content = file_get_contents($examplePath);
