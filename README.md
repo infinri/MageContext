@@ -31,12 +31,6 @@ MageContext runs 25 extractors across your repo and produces a self-describing c
 ## Installation
 
 ```bash
-composer require mage-context/compiler --dev
-```
-
-For development:
-
-```bash
 git clone https://github.com/infinri/MageContext.git
 cd MageContext
 composer install
