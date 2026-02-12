@@ -1,0 +1,71 @@
+{
+    "$comment": "Sample .context-compiler.json — copy to your repo root and customize.",
+
+    "scopes": ["app/code", "app/design"],
+    "include_vendor": false,
+    "output_dir": ".ai-context",
+    "output_format": "json",
+
+    "edge_types": [
+        "module_sequence",
+        "composer_require",
+        "php_symbol_use",
+        "di_preference",
+        "di_virtual_type",
+        "plugin_intercept",
+        "event_observe",
+        "route_entry",
+        "layout_handle",
+        "ui_component",
+        "api_contract",
+        "db_patch"
+    ],
+
+    "thresholds": {
+        "plugin_depth": 5,
+        "event_fanout": 10,
+        "churn_window_days": 365,
+        "max_violations": null,
+        "max_cycles": null,
+        "max_deviations": null,
+        "max_risk": null
+    },
+
+    "max_evidence_per_edge": 5,
+
+    "coupling_metric_subsets": {
+        "structural": ["module_sequence", "composer_require"],
+        "code": ["php_symbol_use"],
+        "runtime": ["di_preference", "plugin_intercept", "event_observe"]
+    },
+
+    "edge_weights": {
+        "module_sequence": 0.7,
+        "composer_require": 0.6,
+        "di_preference": 1.0,
+        "plugin_intercept": 1.2,
+        "event_observe": 1.1,
+        "route_entry": 1.0,
+        "api_contract": 1.1,
+        "layout_handle": 0.9
+    },
+
+    "churn": {
+        "enabled": true,
+        "window_days": 365,
+        "cache": true
+    },
+
+    "max_reverse_index_size_mb": 10,
+
+    "centrality_edge_types": [
+        "module_sequence",
+        "composer_require",
+        "di_preference",
+        "plugin_intercept",
+        "event_observe",
+        "route_entry",
+        "api_contract",
+        "layout_handle"
+    ]
+}

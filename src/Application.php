@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace MageContext;
 
 use MageContext\Command\CompileCommand;
+use MageContext\Command\DiffCommand;
+use MageContext\Command\GuideCommand;
+use MageContext\Command\PackCommand;
 use Symfony\Component\Console\Application as ConsoleApplication;
 
 class Application extends ConsoleApplication
@@ -16,6 +19,9 @@ class Application extends ConsoleApplication
     {
         parent::__construct(self::APP_NAME, self::APP_VERSION);
 
-        $this->add(new CompileCommand());
+        $this->addCommand(new CompileCommand());
+        $this->addCommand(new DiffCommand());
+        $this->addCommand(new PackCommand());
+        $this->addCommand(new GuideCommand());
     }
 }

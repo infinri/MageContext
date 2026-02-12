@@ -4,19 +4,35 @@ declare(strict_types=1);
 
 namespace MageContext\Extractor\Magento;
 
-use MageContext\Extractor\ExtractorInterface;
+use MageContext\Extractor\AbstractExtractor;
+use MageContext\Identity\Evidence;
+use MageContext\Identity\IdentityResolver;
 use Symfony\Component\Finder\Finder;
 
-class ObserverExtractor implements ExtractorInterface
+/**
+ * Spec \u00a73.2C: Event graph.
+ *
+ * For every event, produces:
+ * - event_id, declared_by (module owning events.xml)
+ * - listeners with observer class, method (execute), evidence
+ * - cross-module ratio, risk score
+ * - top_impacted_modules list
+ */
+class ObserverExtractor extends AbstractExtractor
 {
     public function getName(): string
     {
-        return 'events_observers';
+        return 'event_graph';
     }
 
     public function getDescription(): string
     {
-        return 'Extracts event/observer mappings from all events.xml files';
+        return 'Extracts event/observer graph with evidence and cross-module risk scoring';
+    }
+
+    public function getOutputView(): string
+    {
+        return 'runtime_view';
     }
 
     public function extract(string $repoPath, array $scopes): array
@@ -36,65 +52,91 @@ class ObserverExtractor implements ExtractorInterface
                 ->sortByName();
 
             foreach ($finder as $file) {
+                $fileId = $this->fileId($file->getRealPath(), $repoPath);
                 $eventScope = $this->detectScope($file->getRelativePathname());
-                $parsed = $this->parseEventsXml($file->getRealPath(), $repoPath, $eventScope);
+                $declaringModule = $this->resolveModuleFromFile($file->getRealPath());
+                $parsed = $this->parseEventsXml($file->getRealPath(), $repoPath, $eventScope, $fileId, $declaringModule);
                 foreach ($parsed as $observer) {
                     $observers[] = $observer;
                 }
             }
         }
 
-        // Build event-centric view
-        $eventMap = $this->buildEventMap($observers);
+        // Build event-centric view with risk scoring
+        $eventGraph = $this->buildEventGraph($observers);
+
+        // Identify high-risk events
+        $eventFanoutThreshold = $this->context
+            ? ($this->config()->getThreshold('event_fanout') ?? 10)
+            : 10;
+        $highRiskEvents = array_filter($eventGraph, fn($e) => $e['risk_score'] >= 0.7);
+        usort($highRiskEvents, fn($a, $b) => $b['risk_score'] <=> $a['risk_score']);
+
+        // Top impacted modules: modules that listen to the most events
+        $topImpacted = $this->computeTopImpactedModules($observers);
 
         return [
             'observers' => $observers,
-            'event_map' => $eventMap,
+            'event_graph' => $eventGraph,
+            'high_risk_events' => array_values($highRiskEvents),
+            'top_impacted_modules' => $topImpacted,
             'summary' => [
                 'total_observers' => count($observers),
-                'total_events' => count($eventMap),
+                'total_events' => count($eventGraph),
+                'high_risk_events' => count($highRiskEvents),
+                'high_fanout_events' => count(array_filter($eventGraph, fn($e) => $e['listener_count'] > $eventFanoutThreshold)),
                 'disabled_observers' => count(array_filter($observers, fn($o) => $o['disabled'])),
                 'by_scope' => $this->countByScope($observers),
-                'most_observed_events' => $this->topEvents($eventMap, 10),
+                'most_observed_events' => $this->topEvents($eventGraph, 10),
             ],
         ];
     }
 
-    private function parseEventsXml(string $filePath, string $repoPath, string $eventScope): array
+    private function parseEventsXml(string $filePath, string $repoPath, string $eventScope, string $fileId, string $declaringModule): array
     {
         $xml = @simplexml_load_file($filePath);
         if ($xml === false) {
+            $this->warnInvalidXml($fileId, 'events.xml');
             return [];
         }
 
-        $relativePath = str_replace($repoPath . '/', '', $filePath);
         $observers = [];
 
-        // <event name="event_name">
-        //   <observer name="observer_name" instance="Observer\Class" />
-        // </event>
         foreach ($xml->event ?? [] as $eventNode) {
             $eventName = (string) ($eventNode['name'] ?? '');
             if ($eventName === '') {
                 continue;
             }
 
+            $eventId = IdentityResolver::eventId($eventName);
+
             foreach ($eventNode->observer ?? [] as $observerNode) {
                 $observerName = (string) ($observerNode['name'] ?? '');
-                $observerClass = (string) ($observerNode['instance'] ?? '');
+                $observerClass = IdentityResolver::normalizeFqcn((string) ($observerNode['instance'] ?? ''));
                 $disabled = strtolower((string) ($observerNode['disabled'] ?? 'false')) === 'true';
 
                 if ($observerName === '') {
                     continue;
                 }
 
+                $observerModule = $observerClass !== '' ? $this->resolveModule($observerClass) : $declaringModule;
+
                 $observers[] = [
+                    'event_id' => $eventId,
                     'event_name' => $eventName,
                     'observer_name' => $observerName,
                     'observer_class' => $observerClass,
+                    'method' => 'execute',
+                    'module' => $observerModule,
+                    'declared_by' => $declaringModule,
                     'scope' => $eventScope,
-                    'source_file' => $relativePath,
                     'disabled' => $disabled,
+                    'evidence' => [
+                        Evidence::fromXml(
+                            $fileId,
+                            "event '{$eventName}' observer={$observerName} instance={$observerClass}"
+                        )->toArray(),
+                    ],
                 ];
             }
         }
@@ -103,26 +145,116 @@ class ObserverExtractor implements ExtractorInterface
     }
 
     /**
-     * Group observers by event name for an event-centric view.
+     * Build event graph with risk scoring per event.
      *
-     * @return array<string, array> event name => list of observers
+     * Risk score = normalized(listener_count) * cross_module_ratio
+     * High listener count + many cross-module listeners = high risk
+     *
+     * @return array<array>
      */
-    private function buildEventMap(array $observers): array
+    private function buildEventGraph(array $observers): array
     {
-        $map = [];
+        $grouped = [];
         foreach ($observers as $observer) {
             if ($observer['disabled']) {
                 continue;
             }
             $event = $observer['event_name'];
-            $map[$event][] = [
-                'observer_name' => $observer['observer_name'],
-                'observer_class' => $observer['observer_class'],
-                'scope' => $observer['scope'],
+            $grouped[$event][] = $observer;
+        }
+
+        // Find max listener count for normalization
+        $maxListeners = 1;
+        foreach ($grouped as $listeners) {
+            $count = count($listeners);
+            if ($count > $maxListeners) {
+                $maxListeners = $count;
+            }
+        }
+
+        $eventGraph = [];
+        foreach ($grouped as $event => $listeners) {
+            $listenerCount = count($listeners);
+            $modules = array_unique(array_column($listeners, 'module'));
+            sort($modules);
+            $crossModuleCount = count($modules);
+            $crossModuleRatio = $listenerCount > 0 ? $crossModuleCount / $listenerCount : 0;
+
+            // Collect declaring modules
+            $declaredBy = array_unique(array_column($listeners, 'declared_by'));
+            sort($declaredBy);
+
+            // Risk: high listener count (normalized) * cross-module diversity
+            $normalizedCount = $listenerCount / $maxListeners;
+            $riskScore = round($normalizedCount * (0.5 + 0.5 * $crossModuleRatio), 3);
+
+            // Collect all evidence
+            $allEvidence = [];
+            foreach ($listeners as $l) {
+                foreach ($l['evidence'] as $ev) {
+                    $allEvidence[] = $ev;
+                }
+            }
+
+            $eventGraph[] = [
+                'event_id' => IdentityResolver::eventId($event),
+                'event' => $event,
+                'declared_by' => $declaredBy,
+                'listener_count' => $listenerCount,
+                'cross_module_listeners' => $crossModuleCount,
+                'modules' => array_values($modules),
+                'risk_score' => $riskScore,
+                'listeners' => array_map(fn($o) => [
+                    'observer_name' => $o['observer_name'],
+                    'observer_class' => $o['observer_class'],
+                    'method' => $o['method'],
+                    'module' => $o['module'],
+                    'scope' => $o['scope'],
+                    'evidence' => $o['evidence'],
+                ], $listeners),
+                'evidence' => array_slice($allEvidence, 0, 10),
             ];
         }
-        ksort($map);
-        return $map;
+
+        // Sort by risk score descending
+        usort($eventGraph, fn($a, $b) => $b['risk_score'] <=> $a['risk_score']);
+
+        return $eventGraph;
+    }
+
+    /**
+     * Compute top impacted modules: modules that listen to the most events.
+     *
+     * @return array<array{module: string, event_count: int, events: string[]}>
+     */
+    private function computeTopImpactedModules(array $observers): array
+    {
+        $moduleEvents = [];
+        foreach ($observers as $o) {
+            if ($o['disabled']) {
+                continue;
+            }
+            $mod = $o['module'];
+            if (!isset($moduleEvents[$mod])) {
+                $moduleEvents[$mod] = [];
+            }
+            $moduleEvents[$mod][$o['event_name']] = true;
+        }
+
+        $result = [];
+        foreach ($moduleEvents as $mod => $events) {
+            $eventList = array_keys($events);
+            sort($eventList);
+            $result[] = [
+                'module' => $mod,
+                'event_count' => count($eventList),
+                'events' => $eventList,
+            ];
+        }
+
+        usort($result, fn($a, $b) => $b['event_count'] <=> $a['event_count']);
+
+        return array_slice($result, 0, 20);
     }
 
     private function detectScope(string $relativePath): string
@@ -153,23 +285,21 @@ class ObserverExtractor implements ExtractorInterface
     /**
      * Return the top N most-observed events.
      *
-     * @return array<array{event: string, observer_count: int}>
+     * @return array<array{event: string, listener_count: int, risk_score: float}>
      */
-    private function topEvents(array $eventMap, int $limit): array
+    private function topEvents(array $eventGraph, int $limit): array
     {
-        $counts = [];
-        foreach ($eventMap as $event => $observers) {
-            $counts[$event] = count($observers);
-        }
-        arsort($counts);
-
         $top = [];
         $i = 0;
-        foreach ($counts as $event => $count) {
+        foreach ($eventGraph as $entry) {
             if ($i >= $limit) {
                 break;
             }
-            $top[] = ['event' => $event, 'observer_count' => $count];
+            $top[] = [
+                'event' => $entry['event'],
+                'listener_count' => $entry['listener_count'],
+                'risk_score' => $entry['risk_score'],
+            ];
             $i++;
         }
 

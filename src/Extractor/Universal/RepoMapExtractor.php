@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace MageContext\Extractor\Universal;
 
-use MageContext\Extractor\ExtractorInterface;
+use MageContext\Extractor\AbstractExtractor;
 use Symfony\Component\Finder\Finder;
 
-class RepoMapExtractor implements ExtractorInterface
+class RepoMapExtractor extends AbstractExtractor
 {
     public function getName(): string
     {
@@ -17,6 +17,11 @@ class RepoMapExtractor implements ExtractorInterface
     public function getDescription(): string
     {
         return 'Generates a structural map of the repository directory tree';
+    }
+
+    public function getOutputView(): string
+    {
+        return '.';
     }
 
     public function extract(string $repoPath, array $scopes): array

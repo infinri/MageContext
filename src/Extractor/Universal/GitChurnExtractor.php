@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace MageContext\Extractor\Universal;
 
-use MageContext\Extractor\ExtractorInterface;
+use MageContext\Extractor\AbstractExtractor;
 
-class GitChurnExtractor implements ExtractorInterface
+class GitChurnExtractor extends AbstractExtractor
 {
     private int $limit;
+    private bool $cacheWasUsed = false;
 
     public function __construct(int $limit = 50)
     {
@@ -25,12 +26,29 @@ class GitChurnExtractor implements ExtractorInterface
         return 'Identifies files with highest change frequency (churn) weighted by size';
     }
 
+    public function getOutputView(): string
+    {
+        return 'quality_metrics';
+    }
+
     public function extract(string $repoPath, array $scopes): array
     {
         $this->assertGitRepo($repoPath);
 
-        $churnData = $this->getChurnCounts($repoPath, $scopes);
-        $hotspots = [];
+        $windowDays = $this->context !== null ? $this->config()->getChurnWindowDays() : 365;
+        $cache = $this->context?->getChurnCache();
+
+        // Try cache first
+        $cached = $cache?->read($windowDays, $scopes);
+        if ($cached !== null && !empty($cached['file_churn'])) {
+            $churnData = $cached['file_churn'];
+            $this->cacheWasUsed = true;
+        } else {
+            $churnData = $this->getChurnCounts($repoPath, $scopes, $windowDays);
+            $this->cacheWasUsed = false;
+        }
+        // Phase 1: Compute scores using churn + line count (no per-file git log)
+        $candidates = [];
 
         foreach ($churnData as $file => $changeCount) {
             $absolutePath = $repoPath . '/' . $file;
@@ -39,35 +57,52 @@ class GitChurnExtractor implements ExtractorInterface
             }
 
             $lineCount = $this->countLines($absolutePath);
-            $lastModified = $this->getLastModified($repoPath, $file);
-
             $score = $changeCount * log1p($lineCount);
 
-            $hotspots[] = [
+            $candidates[] = [
                 'file' => $file,
                 'change_count' => $changeCount,
                 'line_count' => $lineCount,
-                'last_modified' => $lastModified,
                 'score' => round($score, 2),
             ];
         }
 
-        usort($hotspots, fn(array $a, array $b) => $b['score'] <=> $a['score']);
+        usort($candidates, fn(array $a, array $b) => $b['score'] <=> $a['score']);
+        $candidates = array_slice($candidates, 0, $this->limit);
 
-        $hotspots = array_slice($hotspots, 0, $this->limit);
+        // Phase 2: Enrich only top N with last_modified (expensive per-file git log)
+        $hotspots = [];
+        foreach ($candidates as $c) {
+            $c['last_modified'] = $this->getLastModified($repoPath, $c['file']);
+            $hotspots[] = $c;
+        }
 
         return [
             'hotspots' => $hotspots,
             'total_files_analyzed' => count($churnData),
+            'churn_window_days' => $windowDays,
         ];
     }
 
     /**
-     * Get commit count per file using git log.
+     * Get per-file churn data (public for cache writing by CompileCommand).
      *
-     * @return array<string, int> file => commit count
+     * @return array<string, int>
      */
-    private function getChurnCounts(string $repoPath, array $scopes): array
+    public function getFileChurn(): array
+    {
+        return $this->lastFileChurn;
+    }
+
+    public function wasCacheUsed(): bool
+    {
+        return $this->cacheWasUsed;
+    }
+
+    /** @var array<string, int> */
+    private array $lastFileChurn = [];
+
+    private function getChurnCounts(string $repoPath, array $scopes, int $windowDays): array
     {
         $scopePaths = [];
         foreach ($scopes as $scope) {
@@ -80,9 +115,12 @@ class GitChurnExtractor implements ExtractorInterface
         // If no valid scope directories exist, scan the whole repo
         $pathArgs = empty($scopePaths) ? '' : '-- ' . implode(' ', array_map('escapeshellarg', $scopePaths));
 
+        $sinceArg = escapeshellarg("--since={$windowDays} days ago");
+
         $cmd = sprintf(
-            'cd %s && git log --name-only --pretty=format: --diff-filter=AMRC %s 2>/dev/null',
+            'cd %s && git log --name-only --pretty=format: --diff-filter=AMRC %s %s 2>/dev/null',
             escapeshellarg($repoPath),
+            $sinceArg,
             $pathArgs
         );
 
@@ -105,6 +143,7 @@ class GitChurnExtractor implements ExtractorInterface
         }
 
         arsort($counts);
+        $this->lastFileChurn = $counts;
         return $counts;
     }
 

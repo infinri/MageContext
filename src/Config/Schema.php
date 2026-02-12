@@ -10,40 +10,61 @@ namespace MageContext\Config;
  */
 class Schema
 {
-    public const VERSION = '0.1.0';
+    public const VERSION = '2.0.0';
 
     /**
-     * Top-level output directory structure.
+     * Architectural view directories.
      */
-    public const DIR_MAGENTO = 'magento';
-    public const DIR_KNOWLEDGE = 'knowledge';
+    public const DIR_MODULE_VIEW = 'module_view';
+    public const DIR_RUNTIME_VIEW = 'runtime_view';
+    public const DIR_ALLOCATION_VIEW = 'allocation_view';
+    public const DIR_QUALITY_METRICS = 'quality_metrics';
+    public const DIR_SCENARIOS = 'scenarios';
 
     /**
-     * Magento extractor output files.
+     * Module view output files.
      */
-    public const FILE_MODULE_GRAPH = self::DIR_MAGENTO . '/module_graph';
-    public const FILE_DI_PREFERENCES = self::DIR_MAGENTO . '/di_preference_overrides';
-    public const FILE_PLUGINS = self::DIR_MAGENTO . '/plugins_interceptors';
-    public const FILE_OBSERVERS = self::DIR_MAGENTO . '/events_observers';
-    public const FILE_LAYOUT = self::DIR_MAGENTO . '/layout_handles';
-    public const FILE_UI_COMPONENTS = self::DIR_MAGENTO . '/ui_components';
-    public const FILE_DB_SCHEMA = self::DIR_MAGENTO . '/db_schema_patches';
-    public const FILE_API_SURFACE = self::DIR_MAGENTO . '/api_surface';
-    public const FILE_ROUTES = self::DIR_MAGENTO . '/routes';
+    public const FILE_MODULES = self::DIR_MODULE_VIEW . '/modules';
+    public const FILE_DEPENDENCIES = self::DIR_MODULE_VIEW . '/dependencies';
+    public const FILE_COUPLING_METRICS = self::DIR_MODULE_VIEW . '/coupling_metrics';
+    public const FILE_LAYER_CLASSIFICATION = self::DIR_MODULE_VIEW . '/layer_classification';
+    public const FILE_LAYER_VIOLATIONS = self::DIR_MODULE_VIEW . '/layer_violations';
+    public const FILE_LAYOUT = self::DIR_MODULE_VIEW . '/layout_handles';
+    public const FILE_UI_COMPONENTS = self::DIR_MODULE_VIEW . '/ui_components';
+    public const FILE_DB_SCHEMA = self::DIR_MODULE_VIEW . '/db_schema_patches';
+    public const FILE_API_SURFACE = self::DIR_MODULE_VIEW . '/api_surface';
 
     /**
-     * Knowledge / analysis output files.
+     * Runtime view output files.
      */
-    public const FILE_HOTSPOTS = self::DIR_KNOWLEDGE . '/known_hotspots';
-    public const FILE_DEVIATIONS = self::DIR_KNOWLEDGE . '/custom_deviations.md';
-    public const FILE_GLOSSARY = self::DIR_KNOWLEDGE . '/glossary.md';
-    public const FILE_STANDARDS = self::DIR_KNOWLEDGE . '/coding_standards.md';
+    public const FILE_EXECUTION_PATHS = self::DIR_RUNTIME_VIEW . '/execution_paths';
+    public const FILE_PLUGIN_CHAINS = self::DIR_RUNTIME_VIEW . '/plugin_chains';
+    public const FILE_EVENT_GRAPH = self::DIR_RUNTIME_VIEW . '/event_graph';
+    public const FILE_DI_RESOLUTION = self::DIR_RUNTIME_VIEW . '/di_resolution_map';
+    public const FILE_ROUTES = self::DIR_RUNTIME_VIEW . '/routes';
+
+    /**
+     * Allocation view output files.
+     */
+    public const FILE_SCOPE_CONFIG = self::DIR_ALLOCATION_VIEW . '/scope_config';
+    public const FILE_CRON_JOBS = self::DIR_ALLOCATION_VIEW . '/cron_jobs';
+    public const FILE_MESSAGE_QUEUES = self::DIR_ALLOCATION_VIEW . '/message_queues';
+
+    /**
+     * Quality metrics output files.
+     */
+    public const FILE_MODIFIABILITY = self::DIR_QUALITY_METRICS . '/modifiability';
+    public const FILE_PERFORMANCE = self::DIR_QUALITY_METRICS . '/performance';
+    public const FILE_ARCHITECTURAL_DEBT = self::DIR_QUALITY_METRICS . '/architectural_debt';
+    public const FILE_HOTSPOT_RANKING = self::DIR_QUALITY_METRICS . '/hotspot_ranking';
+    public const FILE_DEVIATIONS = self::DIR_QUALITY_METRICS . '/custom_deviations';
 
     /**
      * Top-level files.
      */
     public const FILE_MANIFEST = 'manifest.json';
     public const FILE_REPO_MAP = 'repo_map';
+    public const FILE_AI_DIGEST = 'ai_digest.md';
 
     /**
      * Expected manifest.json structure.
@@ -58,8 +79,32 @@ class Schema
             'duration_seconds' => 0,
             'repo_path' => '',
             'scopes' => [],
+            'target' => '',
+            'views' => [
+                'module_view' => [],
+                'runtime_view' => [],
+                'allocation_view' => [],
+                'quality_metrics' => [],
+                'scenarios' => [],
+            ],
             'extractors' => [],
             'files' => [],
+        ];
+    }
+
+    /**
+     * All architectural view directories.
+     *
+     * @return array<string>
+     */
+    public static function viewDirectories(): array
+    {
+        return [
+            self::DIR_MODULE_VIEW,
+            self::DIR_RUNTIME_VIEW,
+            self::DIR_ALLOCATION_VIEW,
+            self::DIR_QUALITY_METRICS,
+            self::DIR_SCENARIOS,
         ];
     }
 
@@ -71,11 +116,13 @@ class Schema
     public static function moduleNodeSchema(): array
     {
         return [
-            'name' => 'string — fully qualified module name (e.g., Vendor_Module)',
+            'id' => 'string — fully qualified module name (e.g., Vendor_Module)',
+            'type' => 'string — magento_module|composer_package|theme|library',
             'path' => 'string — relative path from repo root',
+            'area' => 'array<string> — frontend|adminhtml|global',
+            'enabled' => 'bool — whether module is enabled',
             'version' => 'string — module version from module.xml',
             'dependencies' => 'array<string> — list of module names this depends on',
-            'status' => 'string — enabled|disabled',
         ];
     }
 
