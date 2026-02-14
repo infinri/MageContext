@@ -30,6 +30,42 @@ MageContext runs 25 extractors across your repo and produces a self-describing c
 
 ## Installation
 
+**Requirements:** PHP 8.4+ (MageContext’s dependencies require it).
+
+Install in a dedicated directory (recommended if you have other global Composer tools that use different PHP/Symfony versions):
+
+```bash
+mkdir ~/.magecontext
+cd ~/.magecontext
+composer init
+composer config repositories.magecontext vcs git@github.com:infinri/MageContext.git
+composer require mage-context/compiler
+```
+
+If the last step fails due to minimum-stability, run `composer config minimum-stability dev` and try again, or use `composer require mage-context/compiler:dev-master`.
+
+Run the compiler (from anywhere):
+
+```bash
+~/.magecontext/vendor/bin/magecontext
+```
+
+Or from inside `~/.magecontext`: `vendor/bin/magecontext`.
+
+To update later (from `~/.magecontext`):
+
+```bash
+cd ~/.magecontext && composer update mage-context/compiler
+```
+
+**Alternative: one-liner** (same result, PHP 8.4 must be your default `php`):
+
+```bash
+mkdir -p ~/.magecontext && echo '{"require":{"mage-context/compiler":"dev-master"},"repositories":[{"type":"vcs","url":"git@github.com:infinri/MageContext.git"}]}' > ~/.magecontext/composer.json && cd ~/.magecontext && composer update --no-interaction
+```
+
+**Alternative: clone and run from source**
+
 ```bash
 git clone https://github.com/infinri/MageContext.git
 cd MageContext
