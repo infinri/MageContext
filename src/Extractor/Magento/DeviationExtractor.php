@@ -344,6 +344,9 @@ class DeviationExtractor extends AbstractExtractor
 
         foreach ($overriddenModules as $moduleName => $overrides) {
             $totalTemplates = array_sum(array_column($overrides, 'template_count'));
+            if ($totalTemplates === 0) {
+                continue;
+            }
             $sourcePath = $overrides[0]['path'] ?? '';
             $deviations[] = [
                 'type' => 'template_override',

@@ -191,6 +191,7 @@ class ScenarioBundleGenerator
                 $bundle['scenario_id'] = ScenarioSeedResolver::scenarioId([
                     'type' => $path['type'] ?? 'unknown',
                     'class' => $entryClass,
+                    'scenario' => $scenarioName,
                 ]);
                 // Only track if not already matched (later path may overwrite)
                 if (!isset($matchStatus[$scenarioName])) {

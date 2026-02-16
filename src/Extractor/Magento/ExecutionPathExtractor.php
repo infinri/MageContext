@@ -296,6 +296,7 @@ class ExecutionPathExtractor extends AbstractExtractor
         return [
             'scenario' => $scenario,
             'entry_point' => $class . '::' . $method,
+            'entry_class' => $class,
             'type' => $entry['type'],
             'area' => $entry['area'] ?? 'global',
             'module' => $entry['module'] ?? 'unknown',
