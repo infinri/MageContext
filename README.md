@@ -30,7 +30,7 @@ MageContext runs 24 extractors across your repo and produces a self-describing c
 
 ## Installation
 
-**Requirements:** PHP 8.1+ (see `composer.json`).
+**Requirements:** PHP 8.2+ (see `composer.json`).
 
 Install via Composer:
 
@@ -238,7 +238,7 @@ Each scenario bundle is a self-contained slice for one entry point (controller, 
 ### Determinism
 All output is deterministic — same input always produces byte-identical output. This is enforced by:
 - Recursive key sorting on all JSON objects
-- Explicit sort keys for arrays (documented in `progress.md`)
+- Explicit sort keys for arrays
 - A post-compile determinism check (re-load → re-normalize → compare)
 
 ## Configuration
@@ -284,7 +284,7 @@ Exits non-zero if any threshold is exceeded. Writes `ci_summary.json` with pass/
 
 ## Requirements
 
-- PHP >= 8.1
+- PHP >= 8.2
 - Git (for churn analysis)
 - A Magento 2 repository to analyze (or any PHP project in `generic` mode)
 
