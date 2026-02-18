@@ -8,7 +8,7 @@ AI agents fail on enterprise Magento codebases not because the models are weak, 
 
 ## Solution
 
-MageContext runs 25 extractors across your repo and produces a self-describing context bundle:
+MageContext runs 24 extractors across your repo and produces a self-describing context bundle:
 
 - **Module graph** — modules, themes, composer packages, and their dependency edges
 - **Typed dependency graph** — structural, code, and runtime coupling with split metrics
@@ -30,19 +30,22 @@ MageContext runs 25 extractors across your repo and produces a self-describing c
 
 ## Installation
 
-**Requirements:** PHP 8.4+ (MageContext’s dependencies require it).
+**Requirements:** PHP 8.1+ (see `composer.json`).
 
-Install in a dedicated directory (recommended if you have other global Composer tools that use different PHP/Symfony versions):
+Install via Composer:
+
+```bash
+composer global require infinri/mage-context
+```
+
+Or install in a dedicated directory (recommended if you have other global Composer tools that use different PHP/Symfony versions):
 
 ```bash
 mkdir ~/.magecontext
 cd ~/.magecontext
 composer init
-composer config repositories.magecontext vcs git@github.com:infinri/MageContext.git
-composer require mage-context/compiler
+composer require infinri/mage-context
 ```
-
-If the last step fails due to minimum-stability, run `composer config minimum-stability dev` and try again, or use `composer require mage-context/compiler:dev-master`.
 
 Run the compiler (from anywhere):
 
@@ -55,13 +58,7 @@ Or from inside `~/.magecontext`: `vendor/bin/magecontext`.
 To update later (from `~/.magecontext`):
 
 ```bash
-cd ~/.magecontext && composer update mage-context/compiler
-```
-
-**Alternative: one-liner** (same result, PHP 8.4 must be your default `php`):
-
-```bash
-mkdir -p ~/.magecontext && echo '{"require":{"mage-context/compiler":"dev-master"},"repositories":[{"type":"vcs","url":"git@github.com:infinri/MageContext.git"}]}' > ~/.magecontext/composer.json && cd ~/.magecontext && composer update --no-interaction
+cd ~/.magecontext && composer update infinri/mage-context
 ```
 
 **Alternative: clone and run from source**
@@ -91,7 +88,11 @@ bin/magecontext compile --repo /path/to/magento --skip-determinism-check --churn
 bin/magecontext compile --repo /path/to/magento --churn-window 0
 ```
 
-## CLI Options
+## CLI Commands
+
+### `compile`
+
+The primary command. Runs all extractors and produces the full context bundle.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -107,6 +108,56 @@ bin/magecontext compile --repo /path/to/magento --churn-window 0
 | `--max-cycles` | unlimited | CI threshold: max circular dependencies |
 | `--max-deviations` | unlimited | CI threshold: max deviations |
 | `--max-risk` | unlimited | CI threshold: max average modifiability risk (0.0–1.0) |
+
+### `diff`
+
+Compare two compiled context bundles and detect architectural regressions.
+
+```bash
+bin/magecontext diff /path/to/old/.ai-context /path/to/new/.ai-context
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--format`, `-f` | `text` | Output format: `text`, `json`, or `markdown` |
+| `--out`, `-o` | stdout | Output file path |
+
+Exits non-zero if regressions are detected (new cycles, increased violations, rising risk scores, etc.).
+
+### `pack`
+
+Extract minimum relevant context from a compiled bundle for a specific issue or stack trace.
+
+```bash
+bin/magecontext pack --issue "Checkout fails when coupon applied" --context-dir .ai-context
+bin/magecontext pack --issue "500 error" --trace /path/to/stacktrace.log
+bin/magecontext pack --keywords "SalesRule,Quote,Plugin" --context-dir .ai-context
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--issue`, `-i` | — | Issue description or bug summary |
+| `--trace`, `-t` | — | Path to a stack trace or log file |
+| `--keywords`, `-k` | — | Comma-separated additional keywords to search for |
+| `--context-dir`, `-c` | `.ai-context` | Path to the compiled context directory |
+| `--out`, `-o` | stdout | Output path (JSON file or directory) |
+| `--format`, `-f` | `both` | Output format: `json`, `markdown`, or `both` |
+
+### `guide`
+
+Generate development guidance for a task within specific Magento areas.
+
+```bash
+bin/magecontext guide --task "Add free shipping rule" --area salesrule,checkout
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--task`, `-t` | — | Description of the development task |
+| `--area`, `-a` | — | Comma-separated Magento areas or module keywords |
+| `--context-dir`, `-c` | `.ai-context` | Path to the compiled context directory |
+| `--out`, `-o` | stdout | Output file path |
+| `--format`, `-f` | `markdown` | Output format: `json`, `markdown`, or `both` |
 
 ## Output Structure
 
@@ -192,7 +243,7 @@ All output is deterministic — same input always produces byte-identical output
 
 ## Configuration
 
-Place a `.magecontext.json` in your repo root to customize behavior. See `.magecontext.example.json` for all options.
+Place a `.magecontext.json` in your repo root to customize behavior.
 
 Key settings:
 
@@ -235,7 +286,7 @@ Exits non-zero if any threshold is exceeded. Writes `ci_summary.json` with pass/
 
 - PHP >= 8.1
 - Git (for churn analysis)
-- A Magento 2 repository to analyze
+- A Magento 2 repository to analyze (or any PHP project in `generic` mode)
 
 ## Architecture
 
@@ -245,15 +296,17 @@ CLI (symfony/console)
     → CompilerConfig (.magecontext.json + CLI overrides)
     → TargetRegistry (auto-detect Magento vs generic)
     → ExtractorRegistry
-      → 18 Magento extractors (XML, DI, plugins, events, routes, ...)
+      → 20 Magento extractors (XML, DI, plugins, events, routes, allocation, ...)
       → 4 Universal extractors (repo map, git churn, symbol index, file index)
-      → 1 Allocation extractor (areas)
     → OutputWriter (deterministic JSON + Markdown)
     → IndexBuilder (reverse indexes from extractor data)
     → ScenarioBundleGenerator (per-entry-point slices)
     → SchemaGenerator (17 JSON schemas)
     → AiDigestGenerator (ai_digest.md)
     → BundleValidator (determinism, evidence, cross-checks, size guardrails)
+  → DiffCommand (compare two bundles, detect regressions)
+  → PackCommand (extract issue-specific context via ContextResolver)
+  → GuideCommand (generate dev guidance via GuideResolver)
 ```
 
 Extractors are modular — each handles a single concern, outputs structured data with evidence arrays, and declares its output view directory. The registry composes them, and post-processors (IndexBuilder, ScenarioBundleGenerator) cross-reference their output.
@@ -271,7 +324,7 @@ vendor/bin/phpunit tests/Hardening/
 vendor/bin/phpunit tests/Acceptance/
 ```
 
-**66 tests, 231 assertions** covering:
+Test suite covering:
 - 5 canonical AI queries (controller→plugins, interface→impl, event→listeners, module→dependents, hotspot→touchpoints)
 - Determinism invariants
 - Corruption detection
@@ -279,6 +332,7 @@ vendor/bin/phpunit tests/Acceptance/
 - Integrity degradation formulas
 - Percentile normalization
 - Scenario seed resolver
+- Scenario bug regressions
 - Churn cache behavior
 - Config wiring (defaults, file overrides, CLI overrides)
 
@@ -291,10 +345,10 @@ Tested on an enterprise Magento repo (148 modules, 3100+ files):
 | Compile time | 5.6s (warm churn cache) |
 | Peak memory | 97 MB |
 | Output size | 10.8 MB |
-| Extractors | 25 |
+| Extractors | 24 |
 | Schemas | 17 |
 | Scenario bundles | 219 |
 
 ## License
 
-Proprietary — see LICENSE file.
+MIT — see [LICENSE](LICENSE) file.

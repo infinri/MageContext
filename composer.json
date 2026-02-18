@@ -1,8 +1,14 @@
 {
-    "name": "mage-context/compiler",
+    "name": "infinri/mage-context",
     "description": "CLI tool that indexes a Magento repo via static analysis and outputs an AI-ready context bundle",
-    "type": "project",
+    "type": "library",
     "license": "MIT",
+    "keywords": ["magento", "magento2", "static-analysis", "ai", "context", "cli"],
+    "homepage": "https://github.com/infinri/MageContext",
+    "support": {
+        "issues": "https://github.com/infinri/MageContext/issues",
+        "source": "https://github.com/infinri/MageContext"
+    },
     "minimum-stability": "stable",
     "require": {
         "php": ">=8.1",
