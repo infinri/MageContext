@@ -289,7 +289,7 @@ class AiDigestGenerator
         $limit = min(10, count($deepChains));
         for ($i = 0; $i < $limit; $i++) {
             $c = $deepChains[$i];
-            $md .= "| `{$c['target']}` | {$c['depth']} |\n";
+            $md .= "| `{$c['method_id']}` | {$c['depth']} |\n";
         }
 
         return $md;
