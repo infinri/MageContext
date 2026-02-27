@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Sales:etc/order_statuses.xsd">
+    <status status_code="warehouse_pick" label="Warehouse Picking">
+        <state state_code="processing" is_default="false" visible_on_front="true"/>
+    </status>
+    <status status_code="warehouse_pack" label="Warehouse Packing">
+        <state state_code="processing" is_default="false" visible_on_front="true"/>
+    </status>
+    <status status_code="fraud_review" label="Fraud Under Review">
+        <state state_code="payment_review" is_default="true" visible_on_front="false"/>
+    </status>
+</config>

@@ -50,6 +50,7 @@ class PluginExtractor extends AbstractExtractor
             $finder->files()
                 ->in($scopePath)
                 ->name('di.xml')
+                ->exclude(['Test', 'tests', 'Fixture', 'fixtures'])
                 ->sortByName();
 
             foreach ($finder as $file) {
@@ -63,11 +64,12 @@ class PluginExtractor extends AbstractExtractor
             }
         }
 
-        // Resolve plugin methods from PHP source files
+        // Resolve plugin methods from PHP source files (use original-case FQCN for file lookup)
         foreach ($plugins as &$plugin) {
-            $resolved = $this->resolvePluginMethods($repoPath, $plugin['plugin_class']);
+            $resolved = $this->resolvePluginMethods($repoPath, $plugin['plugin_class_fqcn']);
             $plugin['defines_methods'] = $resolved['defines_methods'];
             $plugin['intercepted_methods'] = $resolved['intercepted_methods'];
+            unset($plugin['plugin_class_fqcn']);
         }
         unset($plugin);
 
@@ -157,6 +159,7 @@ class PluginExtractor extends AbstractExtractor
                     'target_class' => $targetClassId,
                     'plugin_name' => $pluginName,
                     'plugin_class' => $pluginClassId,
+                    'plugin_class_fqcn' => $pluginClass,
                     'sort_order' => $sortOrder,
                     'disabled' => $disabled,
                     'scope' => $diScope,

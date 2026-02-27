@@ -79,6 +79,26 @@ class ScenarioBundleGenerator
             }
         }
 
+        // Build module+area → route seed lookup for controller matching
+        $routeModuleToSeed = [];
+        foreach ($allData['route_map']['routes'] ?? [] as $route) {
+            $rArea = $route['area'] ?? '';
+            $rId = $route['route_id'] ?? '';
+            $rKey = 'route:' . $rArea . ':' . $rId;
+            if (!isset($seedMap[$rKey])) {
+                continue;
+            }
+            foreach ($route['modules'] ?? [] as $mod) {
+                $modName = $mod['name'] ?? '';
+                if ($modName !== '') {
+                    $lookupKey = strtolower($modName) . ':' . $rArea;
+                    if (!isset($routeModuleToSeed[$lookupKey])) {
+                        $routeModuleToSeed[$lookupKey] = $seedMap[$rKey];
+                    }
+                }
+            }
+        }
+
         // Build lookup maps for fast access
         $modifiabilityMap = $this->buildModuleMap($modifiability, 'module');
         $hotspotMap = $this->buildModuleMap($hotspots, 'module');
@@ -97,7 +117,7 @@ class ScenarioBundleGenerator
             $entryModule = $path['module'] ?? 'unknown';
 
             // Resolve scenario_id from seed resolver
-            $seed = $this->matchSeed($path, $seedMap, $cronClassToSeed, $cliClassToSeed);
+            $seed = $this->matchSeed($path, $seedMap, $cronClassToSeed, $cliClassToSeed, $routeModuleToSeed);
 
             // Collect all modules involved in this execution path
             $affectedModules = [$entryModule];
@@ -484,7 +504,7 @@ class ScenarioBundleGenerator
      * C.4: Match an execution path to a scenario seed.
      * Uses class-based reverse lookups for cron/cli, route_id for controllers.
      */
-    private function matchSeed(array $path, array $seedMap, array $cronClassToSeed = [], array $cliClassToSeed = []): ?array
+    private function matchSeed(array $path, array $seedMap, array $cronClassToSeed = [], array $cliClassToSeed = [], array $routeModuleToSeed = []): ?array
     {
         $type = $path['type'] ?? '';
         $entryPoint = $path['entry_point'] ?? '';
@@ -498,22 +518,18 @@ class ScenarioBundleGenerator
             return $cliClassToSeed[$entryClass];
         }
 
-        // Route-based matching for controllers (try route_id from scenario name)
+        // Module-based matching for controllers: entry_class → module → route seed
         if ($type === 'controller') {
             $area = $path['area'] ?? 'frontend';
-            // Scenario format: area.controller.path.parts → try route_id: area/path/parts
-            $scenario = $path['scenario'] ?? '';
-            $parts = explode('.', $scenario);
-            if (count($parts) >= 3) {
-                // Skip area and 'controller' prefix, rejoin as route_id
-                $routeParts = array_slice($parts, 1); // remove area prefix
-                if (($routeParts[0] ?? '') === 'controller') {
-                    $routeParts = array_slice($routeParts, 1);
-                }
-                $routeId = $area . '/' . implode('/', $routeParts);
-                $key = 'route:' . $area . ':' . $routeId;
-                if (isset($seedMap[$key])) {
-                    return $seedMap[$key];
+            $rawClass = $path['entry_class'] ?? '';
+            if ($rawClass === '' && $entryClass !== '') {
+                $rawClass = $entryClass;
+            }
+            $module = IdentityResolver::moduleIdFromClass($rawClass);
+            if ($module !== 'unknown') {
+                $lookupKey = strtolower($module) . ':' . $area;
+                if (isset($routeModuleToSeed[$lookupKey])) {
+                    return $routeModuleToSeed[$lookupKey];
                 }
             }
         }

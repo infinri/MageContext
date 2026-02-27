@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework-message-queue:etc/consumer.xsd">
+    <consumer name="acme.warehouse.allocation.consumer" queue="acme.warehouse.main" handler="Acme\Warehouse\Model\AllocationConsumer::process" connection="amqp" maxMessages="500"/>
+    <consumer name="acme.warehouse.stock.consumer" queue="acme.warehouse.stock.queue" handler="Acme\Warehouse\Model\StockUpdateConsumer::process" connection="amqp" maxMessages="1000"/>
+</config>

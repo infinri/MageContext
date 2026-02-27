@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="sales_order_place_after">
+        <observer name="acme_order_fraud_check" instance="Acme\OrderFlow\Observer\FraudCheckObserver"/>
+    </event>
+    <event name="sales_order_state_change_before">
+        <observer name="acme_order_warehouse_routing" instance="Acme\OrderFlow\Observer\WarehouseRoutingObserver"/>
+    </event>
+</config>

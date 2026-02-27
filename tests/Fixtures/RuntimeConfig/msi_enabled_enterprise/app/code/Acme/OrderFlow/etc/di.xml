@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Sales\Model\Order">
+        <plugin name="acme_order_state_guard" type="Acme\OrderFlow\Plugin\OrderStateGuardPlugin"/>
+    </type>
+    <type name="Magento\Sales\Api\OrderManagementInterface">
+        <plugin name="acme_order_mgmt_audit" type="Acme\OrderFlow\Plugin\OrderManagementAuditPlugin"/>
+    </type>
+</config>

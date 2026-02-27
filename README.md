@@ -1,14 +1,14 @@
 # MageContext
 
-A CLI tool that indexes a Magento 2 repository via static analysis and outputs an AI-ready context bundle — structured, queryable, deterministic, and immediately usable by AI coding tools like Windsurf, Cursor, or Claude.
+A CLI tool that indexes a Magento 2 repository — structure, configuration, and runtime behavior — and outputs an AI-ready context bundle. Structured, queryable, deterministic, and immediately usable by AI coding tools like Windsurf, Cursor, or Claude.
 
 ## Problem
 
-AI agents fail on enterprise Magento codebases not because the models are weak, but because the context is opaque. Deep XML config, implicit behavior via DI/plugins/observers, and layers of overrides make it impossible for an AI to reason about the system without help.
+AI agents fail on enterprise Magento codebases not because the models are weak, but because the context is opaque. Deep XML config, implicit behavior via DI/plugins/observers, layers of overrides, and runtime settings scattered across `env.php`, `config.php`, queue topology, and payment gateway configs make it impossible for an AI to reason about the system without help.
 
 ## Solution
 
-MageContext runs 28 extractors across your repo and produces a self-describing context bundle:
+MageContext runs 29 extractors across your repo and produces a self-describing context bundle:
 
 - **Module graph** — modules, themes, composer packages, and their dependency edges
 - **Typed dependency graph** — structural, code, and runtime coupling with split metrics
@@ -34,6 +34,7 @@ MageContext runs 28 extractors across your repo and produces a self-describing c
 - **Safe API matrix** — method stability tiers (api_interface → deprecated) with replacement guidance
 - **DTO data interfaces** — Api/Data/*Interface getter/setter signatures, field inventory, nullability
 - **Implementation patterns** — concrete class constructor dependencies, design patterns, interface deviations
+- **Runtime config** — MSI module status, stock capability inference, declared queue topology & DLQ gaps, DB connection hints & engine intentions, payment method defaults & declared capabilities, order state/status customizations & state mutator detection. Every section carries a machine-readable `_meta.confidence` enum (see [Truth Model](#truth-model-runtime_configjson))
 - **JSON schemas** — every output file has a machine-readable schema
 
 ## Installation
@@ -212,7 +213,8 @@ bin/magecontext guide --task "Add free shipping rule" --area salesrule,checkout
 │   ├── repository_patterns.json         # Repository CRUD + SearchCriteria
 │   ├── plugin_seam_timing.json          # Plugin execution order + side effects
 │   ├── safe_api_matrix.json             # Method stability tiers
-│   └── implementation_patterns.json     # Concrete class deps + patterns
+│   ├── implementation_patterns.json     # Concrete class deps + patterns
+│   └── runtime_config.json              # MSI, stock, queues, DB hints, payments, state machine + _meta tiering
 │
 ├── allocation_view/
 │   └── areas.json                       # Per-area module allocation
@@ -250,6 +252,54 @@ by_route[route_id]  → area, controller, module, plugins on controller
 
 ### Scenario Bundles
 Each scenario bundle is a self-contained slice for one entry point (controller, cron job, CLI command). It includes the execution chain, affected modules, risk assessment, and QA concerns. Use these when working on a specific feature.
+
+### Truth Model (`runtime_config.json`)
+
+RuntimeConfigExtractor operates in **static mode** (repository-only analysis). It does not inspect live database state or broker runtime unless explicitly extended.
+
+Every section in `runtime_config.json` includes a `_meta` block with machine-readable confidence classification:
+
+```json
+{
+  "_meta": {
+    "confidence": "authoritative_static",
+    "source_type": "repo_file",
+    "sources": ["app/etc/config.php"],
+    "runtime_required": false,
+    "limitations": "..."
+  }
+}
+```
+
+**Confidence uses a strict enum — not free-text:**
+
+| Confidence value | Meaning |
+|-----------------|---------|
+| `authoritative_static` | Directly declared in repo files; deterministic and authoritative |
+| `inferred_static` | Derived from structural configuration (DI preferences, schema presence) |
+| `declared_config` | Explicit configuration values from `env.php` or `config.xml`; environment-specific |
+| `best_effort_detection` | Pattern-based mutation detection (e.g. plugins on `Order::setState`) |
+| `requires_runtime_introspection` | Needs DB/broker access; not available in static mode |
+
+**Per-section classification:**
+
+| Section | Confidence | What MageContext extracts | What it does NOT capture |
+|---------|-----------|--------------------------|-------------------------|
+| MSI modules | `authoritative_static` | Module enabled/disabled from `config.php` | Whether MSI is fully configured with sources/stocks |
+| Stock infrastructure | `inferred_static` | DI resolver preferences, schema table presence | Live `inventory_stock_sales_channel` rows (requires DB) |
+| Queue topology | `authoritative_static` | Declared topics, exchanges, bindings, DLQ arguments, consumers | Broker-level policies, deployment overrides, consumer runner config |
+| DB config | `declared_config` | Connection hints from `env.php`, declared table engines from `db_schema.xml` | Live table engine drift, session-level isolation overrides |
+| Payment config | `declared_config` | Defaults from `config.xml`: model, payment_action, active flag, declared capabilities | Admin config overrides (`core_config_data`), dynamic providers, vault layers |
+| State machine: custom_statuses | `authoritative_static` | Declared statuses, state mappings | Dynamic state changes from payment integrations or custom workflows |
+| State machine: state_mutators | `best_effort_detection` | Plugins on `Order::setState`, observers on state events | Indirect mutation via services, payment internals, repository saves, async consumers |
+
+**Design notes:**
+
+- **Confidence applies per output section, not per collector.** `state_machine_overrides` uses subsection-level `_meta` because it emits mixed truth types (authoritative declarations + best-effort mutation detection).
+- **`actual_mapping_known: false`** in stock infrastructure explicitly encodes that this is capability inference only — not actual website→stock assignment data.
+- **Each `state_mutator` item** carries its own `confidence`, `detection_method`, and `limitations` for full epistemic transparency.
+
+> **Static-only guarantee:** The `runtime_required` field in `_meta` is documentation metadata only — it tells consumers which findings would benefit from database access. MageContext never connects to a database or broker in its current mode. If runtime introspection is added in the future, it will be a separate explicit mode (e.g. `--runtime-introspection`) with its own security disclaimers, never a silent upgrade.
 
 ### Determinism
 All output is deterministic — same input always produces byte-identical output. This is enforced by:
@@ -312,7 +362,7 @@ CLI (symfony/console)
     → CompilerConfig (.magecontext.json + CLI overrides)
     → TargetRegistry (auto-detect Magento vs generic)
     → ExtractorRegistry
-      → 28 Magento extractors (XML, DI, plugins, events, routes, service contracts, call graph, ...)
+      → 29 Magento extractors (XML, DI, plugins, events, routes, service contracts, call graph, runtime config, ...)
       → 4 Universal extractors (repo map, git churn, symbol index, file index)
     → OutputWriter (deterministic JSON + Markdown)
     → IndexBuilder (reverse indexes from extractor data)
@@ -342,7 +392,7 @@ vendor/bin/phpunit tests/Acceptance/
 
 Test suite covering:
 - 5 canonical AI queries (controller→plugins, interface→impl, event→listeners, module→dependents, hotspot→touchpoints)
-- 8 new extractor acceptance tests (service contracts, DTOs, repositories, call graph, entities, plugin seams, API matrix, implementation patterns)
+- 9 extractor acceptance tests (service contracts, DTOs, repositories, call graph, entities, plugin seams, API matrix, implementation patterns, runtime config)
 - Determinism invariants (including cross-run determinism for new extractors)
 - Corruption detection
 - Edge weight consistency
@@ -355,15 +405,15 @@ Test suite covering:
 
 ## Performance
 
-Tested on an enterprise Magento repo (148 modules, 3100+ files):
+Tested on an enterprise Magento repo (148 modules, 67,000+ files):
 
 | Metric | Value |
 |--------|-------|
-| Compile time | ~128s full Magento vendor scan, ~6s warm cache on app/code |
-| Peak memory | 97 MB |
-| Extractors | 28 (20 Magento structural + 8 Magento deep-analysis + 4 universal) |
+| Compile time | ~174s full Magento vendor scan, ~6s warm cache on app/code |
+| Peak memory | 974 MB |
+| Extractors | 33 (29 Magento + 4 universal) |
 | Schemas | 17 |
-| Scenario bundles | 1,435 (full Magento vendor) |
+| Scenario bundles | 2,079 (full Magento vendor) |
 
 ## License
 

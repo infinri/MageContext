@@ -43,6 +43,7 @@ class LayoutExtractor extends AbstractExtractor
                 ->in($scopePath)
                 ->name('*.xml')
                 ->path('/layout/')
+                ->exclude(['Test', 'tests', 'Fixture', 'fixtures'])
                 ->sortByName();
 
             foreach ($finder as $file) {

@@ -33,6 +33,7 @@ use MageContext\Extractor\Magento\PluginSeamTimingExtractor;
 use MageContext\Extractor\Magento\SafeApiMatrixExtractor;
 use MageContext\Extractor\Magento\DtoDataInterfaceExtractor;
 use MageContext\Extractor\Magento\ImplementationPatternExtractor;
+use MageContext\Extractor\Magento\RuntimeConfigExtractor;
 
 class MagentoTarget implements TargetInterface
 {
@@ -116,6 +117,7 @@ class MagentoTarget implements TargetInterface
             new SafeApiMatrixExtractor(),
             new DtoDataInterfaceExtractor(),
             new ImplementationPatternExtractor(),
+            new RuntimeConfigExtractor(),
         ];
     }
 

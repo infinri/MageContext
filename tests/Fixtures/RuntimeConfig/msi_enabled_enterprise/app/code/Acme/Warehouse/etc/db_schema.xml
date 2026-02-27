@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="inventory_stock_sales_channel" resource="default" engine="innodb">
+        <column xsi:type="int" name="stock_id" unsigned="true" nullable="false"/>
+        <column xsi:type="varchar" name="type" nullable="false" length="64"/>
+        <column xsi:type="varchar" name="code" nullable="false" length="64"/>
+    </table>
+    <table name="acme_warehouse_allocation" resource="default" engine="innodb">
+        <column xsi:type="int" name="allocation_id" unsigned="true" identity="true" nullable="false"/>
+        <column xsi:type="int" name="stock_id" unsigned="true" nullable="false"/>
+        <column xsi:type="varchar" name="warehouse_code" nullable="false" length="64"/>
+    </table>
+    <table name="acme_warehouse_log" resource="default" engine="memory">
+        <column xsi:type="int" name="log_id" unsigned="true" identity="true" nullable="false"/>
+        <column xsi:type="text" name="message" nullable="true"/>
+    </table>
+</schema>

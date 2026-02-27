@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework-message-queue:etc/topology.xsd">
+    <exchange name="acme.warehouse.dlx" type="topic" connection="amqp">
+        <binding id="acme.warehouse.dlq.binding" topic="acme.warehouse.allocation.process" destinationType="queue" destination="acme.warehouse.dlq"/>
+    </exchange>
+    <exchange name="acme.warehouse.exchange" type="topic" connection="amqp">
+        <binding id="acme.warehouse.main.binding" topic="acme.warehouse.allocation.process" destinationType="queue" destination="acme.warehouse.main">
+            <arguments>
+                <argument name="x-dead-letter-exchange" xsi:type="string">acme.warehouse.dlx</argument>
+                <argument name="x-delivery-limit" xsi:type="number">5</argument>
+                <argument name="x-message-ttl" xsi:type="number">60000</argument>
+            </arguments>
+        </binding>
+    </exchange>
+</config>
