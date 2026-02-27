@@ -8,7 +8,7 @@ AI agents fail on enterprise Magento codebases not because the models are weak, 
 
 ## Solution
 
-MageContext runs 24 extractors across your repo and produces a self-describing context bundle:
+MageContext runs 28 extractors across your repo and produces a self-describing context bundle:
 
 - **Module graph** — modules, themes, composer packages, and their dependency edges
 - **Typed dependency graph** — structural, code, and runtime coupling with split metrics
@@ -26,6 +26,14 @@ MageContext runs 24 extractors across your repo and produces a self-describing c
 - **Scenario bundles** — self-contained slices per entry point with risk assessment
 - **Quality metrics** — modifiability risk, architectural debt, performance indicators, deviation detection
 - **Hotspot ranking** — modules ranked by combined git churn and dependency centrality
+- **Service contracts** — Api/*Interface method signatures with DI bindings and webapi exposure
+- **Repository patterns** — repository interfaces, CRUD completeness, SearchCriteria usage guide
+- **Entity relationships** — entity→table mappings, foreign keys, domain invariants, EAV detection
+- **Call graph** — delegation chains from REST/GraphQL/CLI entry points through DI to concrete executors
+- **Plugin seam timing** — per-method plugin execution order, side-effect warnings, hook-type recommendations
+- **Safe API matrix** — method stability tiers (api_interface → deprecated) with replacement guidance
+- **DTO data interfaces** — Api/Data/*Interface getter/setter signatures, field inventory, nullability
+- **Implementation patterns** — concrete class constructor dependencies, design patterns, interface deviations
 - **JSON schemas** — every output file has a machine-readable schema
 
 ## Installation
@@ -187,7 +195,9 @@ bin/magecontext guide --task "Add free shipping rule" --area salesrule,checkout
 │   ├── layout_handles.json              # Layout XML structure
 │   ├── ui_components.json               # UI component definitions
 │   ├── db_schema_patches.json           # Declarative schema + patches
-│   └── api_surface.json                 # REST + GraphQL endpoints
+│   ├── api_surface.json                 # REST + GraphQL endpoints
+│   ├── entity_relationships.json        # Entity→table maps, foreign keys, invariants
+│   └── dto_data_interfaces.json         # Api/Data/*Interface getter/setter signatures
 │
 ├── runtime_view/                        # Behavioral analysis
 │   ├── execution_paths.json             # Reconstructed entry→exit flows
@@ -196,7 +206,13 @@ bin/magecontext guide --task "Add free shipping rule" --area salesrule,checkout
 │   ├── di_resolution_map.json           # DI preference resolution
 │   ├── route_map.json                   # Route declarations
 │   ├── cron_map.json                    # Cron job declarations
-│   └── cli_commands.json                # CLI command declarations
+│   ├── cli_commands.json                # CLI command declarations
+│   ├── call_graph.json                  # Delegation chains through DI
+│   ├── service_contracts.json           # Api/*Interface signatures + DI + webapi
+│   ├── repository_patterns.json         # Repository CRUD + SearchCriteria
+│   ├── plugin_seam_timing.json          # Plugin execution order + side effects
+│   ├── safe_api_matrix.json             # Method stability tiers
+│   └── implementation_patterns.json     # Concrete class deps + patterns
 │
 ├── allocation_view/
 │   └── areas.json                       # Per-area module allocation
@@ -296,7 +312,7 @@ CLI (symfony/console)
     → CompilerConfig (.magecontext.json + CLI overrides)
     → TargetRegistry (auto-detect Magento vs generic)
     → ExtractorRegistry
-      → 20 Magento extractors (XML, DI, plugins, events, routes, allocation, ...)
+      → 28 Magento extractors (XML, DI, plugins, events, routes, service contracts, call graph, ...)
       → 4 Universal extractors (repo map, git churn, symbol index, file index)
     → OutputWriter (deterministic JSON + Markdown)
     → IndexBuilder (reverse indexes from extractor data)
@@ -326,7 +342,8 @@ vendor/bin/phpunit tests/Acceptance/
 
 Test suite covering:
 - 5 canonical AI queries (controller→plugins, interface→impl, event→listeners, module→dependents, hotspot→touchpoints)
-- Determinism invariants
+- 8 new extractor acceptance tests (service contracts, DTOs, repositories, call graph, entities, plugin seams, API matrix, implementation patterns)
+- Determinism invariants (including cross-run determinism for new extractors)
 - Corruption detection
 - Edge weight consistency
 - Integrity degradation formulas
@@ -342,12 +359,11 @@ Tested on an enterprise Magento repo (148 modules, 3100+ files):
 
 | Metric | Value |
 |--------|-------|
-| Compile time | 5.6s (warm churn cache) |
+| Compile time | ~128s full Magento vendor scan, ~6s warm cache on app/code |
 | Peak memory | 97 MB |
-| Output size | 10.8 MB |
-| Extractors | 24 |
+| Extractors | 28 (20 Magento structural + 8 Magento deep-analysis + 4 universal) |
 | Schemas | 17 |
-| Scenario bundles | 219 |
+| Scenario bundles | 1,435 (full Magento vendor) |
 
 ## License
 
