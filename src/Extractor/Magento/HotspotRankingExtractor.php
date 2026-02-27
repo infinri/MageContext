@@ -122,6 +122,7 @@ class HotspotRankingExtractor extends AbstractExtractor
         }
 
         $this->lastModuleChurn = [];
+        $moduleChurn = [];
 
         foreach ($scopes as $scope) {
             $scopePath = trim($scope, '/');
