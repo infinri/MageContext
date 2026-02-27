@@ -246,14 +246,6 @@ class LayerClassificationExtractor extends AbstractExtractor
         return 'unknown';
     }
 
-    private function resolveModuleFromPath(string $relativePath): string
-    {
-        if (preg_match('#(?:app/code)/([^/]+)/([^/]+)/#', $relativePath, $match)) {
-            return $match[1] . '_' . $match[2];
-        }
-        return 'unknown';
-    }
-
     /**
      * Convert a FQCN to a relative path pattern for layer classification.
      * e.g., Vendor\Module\Controller\Index => Vendor/Module/Controller/Index.php

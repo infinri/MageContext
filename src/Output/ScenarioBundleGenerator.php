@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MageContext\Output;
 
+use MageContext\Identity\IdentityResolver;
+
 class ScenarioBundleGenerator
 {
     /** @var array Coverage tracking for scenario_coverage.json */
@@ -102,7 +104,7 @@ class ScenarioBundleGenerator
 
             // From DI resolution chain
             foreach ($path['di_resolution_chain'] ?? [] as $step) {
-                $mod = $this->resolveModuleFromClass($step['resolved_to'] ?? '');
+                $mod = IdentityResolver::moduleIdFromClass($step['resolved_to'] ?? '');
                 if ($mod !== 'unknown') {
                     $affectedModules[] = $mod;
                 }
@@ -110,7 +112,7 @@ class ScenarioBundleGenerator
 
             // From plugin stack
             foreach ($path['plugin_stack'] ?? [] as $plugin) {
-                $mod = $this->resolveModuleFromClass($plugin['plugin_class'] ?? '');
+                $mod = IdentityResolver::moduleIdFromClass($plugin['plugin_class'] ?? '');
                 if ($mod !== 'unknown') {
                     $affectedModules[] = $mod;
                 }
@@ -119,7 +121,7 @@ class ScenarioBundleGenerator
             // From observer triggers
             foreach ($path['observer_triggers'] ?? [] as $trigger) {
                 foreach ($trigger['observers'] ?? [] as $observer) {
-                    $mod = $this->resolveModuleFromClass($observer['observer_class'] ?? '');
+                    $mod = IdentityResolver::moduleIdFromClass($observer['observer_class'] ?? '');
                     if ($mod !== 'unknown') {
                         $affectedModules[] = $mod;
                     }
@@ -461,15 +463,6 @@ class ScenarioBundleGenerator
             }
         }
         return $map;
-    }
-
-    private function resolveModuleFromClass(string $className): string
-    {
-        $parts = explode('\\', ltrim($className, '\\'));
-        if (count($parts) >= 2) {
-            return $parts[0] . '_' . $parts[1];
-        }
-        return 'unknown';
     }
 
     /**

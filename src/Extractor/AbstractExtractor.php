@@ -9,6 +9,7 @@ use MageContext\Identity\Evidence;
 use MageContext\Identity\IdentityResolver;
 use MageContext\Identity\ModuleResolver;
 use MageContext\Identity\WarningCollector;
+use Symfony\Component\Finder\Finder;
 
 /**
  * Base class for all extractors providing foundation service access.
@@ -212,6 +213,193 @@ abstract class AbstractExtractor implements ExtractorInterface
             'analysis_integrity_score' => $this->getIntegrityScore(),
             'degraded' => $this->isDegraded(),
         ];
+    }
+
+    /**
+     * Scan repository for module dependency edges.
+     *
+     * Scans module.xml (sequence), di.xml (preferences, plugins), and events.xml
+     * (observer registrations). Returns deduplicated typed edges and all discovered
+     * module names.
+     *
+     * @return array{edges: array<array{from: string, to: string, type: string}>, modules: array<string>}
+     */
+    protected function scanDependencyEdges(string $repoPath, array $scopes): array
+    {
+        $edges = [];
+        $seen = [];
+        $modules = [];
+
+        foreach ($scopes as $scope) {
+            $scopePath = $repoPath . '/' . trim($scope, '/');
+            if (!is_dir($scopePath)) {
+                continue;
+            }
+
+            // module.xml sequence deps
+            $finder = new Finder();
+            $finder->files()
+                ->in($scopePath)
+                ->name('module.xml')
+                ->path('/^[^\/]+\/[^\/]+\/etc\//')
+                ->sortByName();
+
+            foreach ($finder as $file) {
+                $xml = @simplexml_load_file($file->getRealPath());
+                if ($xml === false) {
+                    continue;
+                }
+
+                $moduleNode = $xml->module ?? null;
+                if ($moduleNode === null) {
+                    continue;
+                }
+
+                $name = (string) ($moduleNode['name'] ?? '');
+                if ($name === '') {
+                    continue;
+                }
+
+                $modules[] = $name;
+
+                if (isset($moduleNode->sequence)) {
+                    foreach ($moduleNode->sequence->module as $dep) {
+                        $depName = (string) ($dep['name'] ?? '');
+                        if ($depName !== '') {
+                            $key = "{$name}|{$depName}|module_sequence";
+                            if (!isset($seen[$key])) {
+                                $seen[$key] = true;
+                                $edges[] = ['from' => $name, 'to' => $depName, 'type' => 'module_sequence'];
+                            }
+                        }
+                    }
+                }
+            }
+
+            // di.xml preferences and plugins
+            $diFinder = new Finder();
+            $diFinder->files()->in($scopePath)->name('di.xml')->sortByName();
+
+            foreach ($diFinder as $file) {
+                $ownerModule = $this->resolveModuleFromFile($file->getRealPath());
+                if ($ownerModule === 'unknown') {
+                    continue;
+                }
+
+                $xml = @simplexml_load_file($file->getRealPath());
+                if ($xml === false) {
+                    continue;
+                }
+
+                // Preferences
+                foreach ($xml->xpath('//preference') ?: [] as $node) {
+                    $for = (string) ($node['for'] ?? '');
+                    $depModule = $this->resolveModule($for);
+                    if ($depModule !== 'unknown' && $depModule !== $ownerModule) {
+                        $key = "{$ownerModule}|{$depModule}|di_preference";
+                        if (!isset($seen[$key])) {
+                            $seen[$key] = true;
+                            $edges[] = ['from' => $ownerModule, 'to' => $depModule, 'type' => 'di_preference'];
+                        }
+                    }
+                }
+
+                // Plugins
+                foreach ($xml->xpath('//type') ?: [] as $typeNode) {
+                    $targetClass = (string) ($typeNode['name'] ?? '');
+                    foreach ($typeNode->plugin ?? [] as $pluginNode) {
+                        $disabled = strtolower((string) ($pluginNode['disabled'] ?? 'false')) === 'true';
+                        if ($disabled) {
+                            continue;
+                        }
+                        $depModule = $this->resolveModule($targetClass);
+                        if ($depModule !== 'unknown' && $depModule !== $ownerModule) {
+                            $key = "{$ownerModule}|{$depModule}|plugin_intercept";
+                            if (!isset($seen[$key])) {
+                                $seen[$key] = true;
+                                $edges[] = ['from' => $ownerModule, 'to' => $depModule, 'type' => 'plugin_intercept'];
+                            }
+                        }
+                    }
+                }
+            }
+
+            // events.xml observer registrations
+            $eventFinder = new Finder();
+            $eventFinder->files()->in($scopePath)->name('events.xml')->sortByName();
+
+            foreach ($eventFinder as $file) {
+                $ownerModule = $this->resolveModuleFromFile($file->getRealPath());
+                if ($ownerModule === 'unknown') {
+                    continue;
+                }
+
+                $xml = @simplexml_load_file($file->getRealPath());
+                if ($xml === false) {
+                    continue;
+                }
+
+                foreach ($xml->event ?? [] as $eventNode) {
+                    foreach ($eventNode->observer ?? [] as $obsNode) {
+                        $obsClass = (string) ($obsNode['instance'] ?? '');
+                        $obsModule = $this->resolveModule($obsClass);
+                        if ($obsModule !== 'unknown' && $obsModule !== $ownerModule) {
+                            $key = "{$ownerModule}|{$obsModule}|event_observe";
+                            if (!isset($seen[$key])) {
+                                $seen[$key] = true;
+                                $edges[] = ['from' => $ownerModule, 'to' => $obsModule, 'type' => 'event_observe'];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return ['edges' => $edges, 'modules' => array_unique($modules)];
+    }
+
+    /**
+     * Detect Magento area from a relative file path.
+     * Returns 'adminhtml', 'frontend', or the given $default.
+     */
+    protected function detectArea(string $relativePath, string $default = 'base'): string
+    {
+        $normalized = str_replace('\\', '/', $relativePath);
+        if (str_contains($normalized, '/adminhtml/')) {
+            return 'adminhtml';
+        }
+        if (str_contains($normalized, '/frontend/')) {
+            return 'frontend';
+        }
+        return $default;
+    }
+
+    /**
+     * Resolve module_id from a relative file path.
+     * Delegates to IdentityResolver::moduleIdFromPath().
+     */
+    protected function moduleIdFromPath(string $relativePath): string
+    {
+        return IdentityResolver::moduleIdFromPath($relativePath);
+    }
+
+    /**
+     * Count items grouped by a field value.
+     * Generic replacement for countByScope, countByArea, countByType, etc.
+     *
+     * @param array<array> $items Array of records
+     * @param string $field Field name to group by
+     * @return array<string, int> Counts keyed by field value, sorted by key
+     */
+    protected function countByField(array $items, string $field): array
+    {
+        $counts = [];
+        foreach ($items as $item) {
+            $key = $item[$field] ?? 'unknown';
+            $counts[$key] = ($counts[$key] ?? 0) + 1;
+        }
+        ksort($counts);
+        return $counts;
     }
 
     /**

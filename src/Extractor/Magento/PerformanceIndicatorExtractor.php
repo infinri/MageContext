@@ -93,7 +93,7 @@ class PerformanceIndicatorExtractor extends AbstractExtractor
                 'deep_plugin_stacks' => count($deepPlugins),
                 'high_observer_events' => count($highObserverEvents),
                 'layout_merge_concerns' => count($layoutDepth),
-                'by_severity' => $this->countBySeverity($indicators),
+                'by_severity' => $this->countByField($indicators, 'severity'),
             ],
         ];
     }
@@ -291,7 +291,7 @@ class PerformanceIndicatorExtractor extends AbstractExtractor
         $deep = [];
         foreach ($blockOverrides as $handle => $sources) {
             // Only flag if multiple different modules override the same block
-            $modules = array_unique(array_map(fn($s) => $this->resolveModuleFromPath($s), $sources));
+            $modules = array_unique(array_map(fn($s) => $this->moduleIdFromPath($s), $sources));
             if (count($modules) > 2) {
                 $deep[] = [
                     'handle' => $handle,
@@ -307,21 +307,4 @@ class PerformanceIndicatorExtractor extends AbstractExtractor
         return $deep;
     }
 
-    private function resolveModuleFromPath(string $relativePath): string
-    {
-        if (preg_match('#(?:app/code)/([^/]+)/([^/]+)/#', $relativePath, $match)) {
-            return $match[1] . '_' . $match[2];
-        }
-        return 'unknown';
-    }
-
-    private function countBySeverity(array $items): array
-    {
-        $counts = [];
-        foreach ($items as $item) {
-            $severity = $item['severity'];
-            $counts[$severity] = ($counts[$severity] ?? 0) + 1;
-        }
-        return $counts;
-    }
 }

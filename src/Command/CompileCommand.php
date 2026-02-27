@@ -25,6 +25,7 @@ use MageContext\Target\GenericTarget;
 use MageContext\Target\MagentoTarget;
 use MageContext\Target\TargetInterface;
 use MageContext\Target\TargetRegistry;
+use MageContext\Util\ArrayUtil;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -208,6 +209,91 @@ class CompileCommand extends Command
             $warningCollector
         );
 
+        [$extractorResults, $allExtractedData] = $this->runExtractors(
+            $registry, $compilationContext, $writer, $config, $repoPath, $scopes, $format, $io
+        );
+
+        $duration = microtime(true) - $startTime;
+
+        $this->generatePostExtractorOutputs(
+            $allExtractedData, $extractorResults, $writer, $repoPath, $target, $format, $duration, $io
+        );
+
+        // Set integrity score denominators from same discovery logic as dep graph
+        $warningCollector->setTotals(
+            max(1, $moduleResolver->getDiscoveredClassCount()),
+            max(1, $this->countDiTargets($allExtractedData))
+        );
+
+        $this->runValidation(
+            $config, $writer, $outDir, $extractorResults, $allExtractedData, $input, $io
+        );
+
+        $writer->writeManifest($extractorResults, $duration, $repoPath, $scopes, $target->getName(), $warningCollector, $config);
+
+        // CI mode: generate summary and check thresholds
+        $ciMode = $input->getOption('ci');
+        if ($ciMode) {
+            $io->section('CI Analysis');
+            $ciResult = $this->runCiChecks($input, $allExtractedData, $writer, $io);
+            if ($ciResult !== Command::SUCCESS) {
+                return $ciResult;
+            }
+        }
+
+        $io->newLine();
+        $io->success(sprintf(
+            'Context bundle compiled in %.2fs → %s',
+            $duration,
+            $outDir
+        ));
+
+        return Command::SUCCESS;
+    }
+
+    private function buildTargetRegistry(): TargetRegistry
+    {
+        $registry = new TargetRegistry();
+        $registry->register(new MagentoTarget());
+        $registry->register(new GenericTarget());
+        return $registry;
+    }
+
+    private function buildRegistry(TargetInterface $target): ExtractorRegistry
+    {
+        $registry = new ExtractorRegistry();
+
+        // Target-specific extractors
+        foreach ($target->getExtractors() as $extractor) {
+            $registry->register($extractor);
+        }
+
+        // Universal analyzers (always included)
+        $registry->register(new RepoMapExtractor());
+        $registry->register(new GitChurnExtractor());
+
+        // C.1+C.2: Index extractors (must run after target extractors)
+        $registry->register(new SymbolIndexExtractor());
+        $registry->register(new FileIndexExtractor());
+
+        return $registry;
+    }
+
+    /**
+     * Run all registered extractors and collect results.
+     *
+     * @return array{0: array, 1: array} [$extractorResults, $allExtractedData]
+     */
+    private function runExtractors(
+        ExtractorRegistry $registry,
+        CompilationContext $compilationContext,
+        OutputWriter $writer,
+        CompilerConfig $config,
+        string $repoPath,
+        array $scopes,
+        string $format,
+        SymfonyStyle $io
+    ): array {
         $extractorResults = [];
         $allExtractedData = [];
         $io->section('Running extractors');
@@ -316,8 +402,22 @@ class CompileCommand extends Command
             );
         }
 
-        $duration = microtime(true) - $startTime;
+        return [$extractorResults, $allExtractedData];
+    }
 
+    /**
+     * Generate schemas, AI digest, reverse indexes, and scenario bundles.
+     */
+    private function generatePostExtractorOutputs(
+        array &$allExtractedData,
+        array &$extractorResults,
+        OutputWriter $writer,
+        string $repoPath,
+        TargetInterface $target,
+        string $format,
+        float $duration,
+        SymfonyStyle $io
+    ): void {
         // D.1: Generate JSON schemas
         $schemaGenerator = new SchemaGenerator();
         $schemaFiles = $schemaGenerator->generate($writer);
@@ -397,14 +497,20 @@ class CompileCommand extends Command
             $coverageReport['total_scenarios'],
             $coverageReport['unmatched']
         ));
+    }
 
-        // Set integrity score denominators from same discovery logic as dep graph
-        $warningCollector->setTotals(
-            max(1, $moduleResolver->getDiscoveredClassCount()),
-            max(1, $this->countDiTargets($allExtractedData))
-        );
-
-        // B+.7: Run BundleValidator before final manifest
+    /**
+     * B+.7: Run BundleValidator and record results.
+     */
+    private function runValidation(
+        CompilerConfig $config,
+        OutputWriter $writer,
+        string $outDir,
+        array &$extractorResults,
+        array $allExtractedData,
+        InputInterface $input,
+        SymfonyStyle $io
+    ): void {
         $io->section('Validating bundle');
         $validator = new BundleValidator($config, $writer, $outDir);
         $emittedEdgeTypes = $this->collectEmittedEdgeTypes($allExtractedData);
@@ -431,55 +537,6 @@ class CompileCommand extends Command
             'output_files' => [],
             'validation' => $validationResult,
         ];
-
-        $writer->writeManifest($extractorResults, $duration, $repoPath, $scopes, $target->getName(), $warningCollector, $config);
-
-        // CI mode: generate summary and check thresholds
-        $ciMode = $input->getOption('ci');
-        if ($ciMode) {
-            $io->section('CI Analysis');
-            $ciResult = $this->runCiChecks($input, $allExtractedData, $writer, $io);
-            if ($ciResult !== Command::SUCCESS) {
-                return $ciResult;
-            }
-        }
-
-        $io->newLine();
-        $io->success(sprintf(
-            'Context bundle compiled in %.2fs → %s',
-            $duration,
-            $outDir
-        ));
-
-        return Command::SUCCESS;
-    }
-
-    private function buildTargetRegistry(): TargetRegistry
-    {
-        $registry = new TargetRegistry();
-        $registry->register(new MagentoTarget());
-        $registry->register(new GenericTarget());
-        return $registry;
-    }
-
-    private function buildRegistry(TargetInterface $target): ExtractorRegistry
-    {
-        $registry = new ExtractorRegistry();
-
-        // Target-specific extractors
-        foreach ($target->getExtractors() as $extractor) {
-            $registry->register($extractor);
-        }
-
-        // Universal analyzers (always included)
-        $registry->register(new RepoMapExtractor());
-        $registry->register(new GitChurnExtractor());
-
-        // C.1+C.2: Index extractors (must run after target extractors)
-        $registry->register(new SymbolIndexExtractor());
-        $registry->register(new FileIndexExtractor());
-
-        return $registry;
     }
 
     private function countItems(array $data): int
@@ -502,7 +559,7 @@ class CompileCommand extends Command
     {
         $records = [];
         foreach ($data as $section => $items) {
-            if (is_array($items) && !$this->isAssoc($items)) {
+            if (is_array($items) && !ArrayUtil::isAssoc($items)) {
                 foreach ($items as $item) {
                     $records[] = array_merge(['_section' => $section], is_array($item) ? $item : ['value' => $item]);
                 }
@@ -511,14 +568,6 @@ class CompileCommand extends Command
             }
         }
         return $records;
-    }
-
-    private function isAssoc(array $arr): bool
-    {
-        if (empty($arr)) {
-            return false;
-        }
-        return array_keys($arr) !== range(0, count($arr) - 1);
     }
 
     /**

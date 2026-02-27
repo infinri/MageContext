@@ -113,7 +113,7 @@ class PluginExtractor extends AbstractExtractor
                 'cross_module_plugins' => $crossModuleCount,
                 'core_interceptions' => count(array_filter($plugins, fn($p) => $p['targets_core'])),
                 'disabled_plugins' => count(array_filter($plugins, fn($p) => $p['disabled'])),
-                'by_scope' => $this->countByScope($plugins),
+                'by_scope' => $this->countByField($plugins, 'scope'),
             ],
             'deep_chains' => $deepChains,
         ];
@@ -192,7 +192,9 @@ class PluginExtractor extends AbstractExtractor
             return $result;
         }
 
-        $filePath = $this->classToFilePath($repoPath, $pluginClass);
+        $filePath = $this->context !== null
+            ? $this->moduleResolver()->resolveClassFile($pluginClass)
+            : $this->classToFilePath($repoPath, $pluginClass);
         if ($filePath === null || !is_file($filePath)) {
             $this->warnUnresolvedClass($pluginClass, 'plugin class file not found');
             return $result;
@@ -365,14 +367,4 @@ class PluginExtractor extends AbstractExtractor
         return $chains;
     }
 
-    private function countByScope(array $plugins): array
-    {
-        $counts = [];
-        foreach ($plugins as $p) {
-            $scope = $p['scope'];
-            $counts[$scope] = ($counts[$scope] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
 }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MageContext\Config;
 
+use MageContext\Util\ArrayUtil;
+
 /**
  * Loads .magecontext.json and provides merged configuration.
  *
@@ -101,7 +103,7 @@ class CompilerConfig
             ],
 
             // P5: Max reverse index size before validator warns (MB)
-            'max_reverse_index_size_mb' => 10,
+            'max_reverse_index_size_mb' => 12,
 
             // Explicit list — new edge types must be added here to enter centrality.
             // Excludes php_symbol_use (noisy). Available as separate "code centrality" if needed.
@@ -147,21 +149,13 @@ class CompilerConfig
     private static function merge(array $base, array $override): array
     {
         foreach ($override as $key => $value) {
-            if (is_array($value) && isset($base[$key]) && is_array($base[$key]) && self::isAssoc($value)) {
+            if (is_array($value) && isset($base[$key]) && is_array($base[$key]) && ArrayUtil::isAssoc($value)) {
                 $base[$key] = self::merge($base[$key], $value);
             } else {
                 $base[$key] = $value;
             }
         }
         return $base;
-    }
-
-    private static function isAssoc(array $arr): bool
-    {
-        if (empty($arr)) {
-            return false;
-        }
-        return array_keys($arr) !== range(0, count($arr) - 1);
     }
 
     // --- Accessors ---
@@ -263,7 +257,7 @@ class CompilerConfig
      */
     public function getMaxReverseIndexSizeMb(): int
     {
-        return (int) ($this->config['max_reverse_index_size_mb'] ?? 10);
+        return (int) ($this->config['max_reverse_index_size_mb'] ?? 12);
     }
 
     /**

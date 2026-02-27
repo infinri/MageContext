@@ -50,7 +50,7 @@ class RoutesExtractor extends AbstractExtractor
 
             foreach ($finder as $file) {
                 $fileId = $this->fileId($file->getRealPath(), $repoPath);
-                $area = $this->detectArea($file->getRelativePathname());
+                $area = $this->detectArea($file->getRelativePathname(), 'global');
                 $declaringModule = $this->resolveModuleFromFile($file->getRealPath());
                 $parsed = $this->parseRoutesXml($file->getRealPath(), $repoPath, $area, $fileId, $declaringModule);
                 foreach ($parsed as $route) {
@@ -63,8 +63,8 @@ class RoutesExtractor extends AbstractExtractor
             'routes' => $routes,
             'summary' => [
                 'total_routes' => count($routes),
-                'by_area' => $this->countByArea($routes),
-                'by_router' => $this->countByRouter($routes),
+                'by_area' => $this->countByField($routes, 'area'),
+                'by_router' => $this->countByField($routes, 'router'),
             ],
         ];
     }
@@ -129,37 +129,4 @@ class RoutesExtractor extends AbstractExtractor
         return $routes;
     }
 
-    private function detectArea(string $relativePath): string
-    {
-        $normalized = str_replace('\\', '/', $relativePath);
-        if (str_contains($normalized, '/adminhtml/')) {
-            return 'adminhtml';
-        }
-        if (str_contains($normalized, '/frontend/')) {
-            return 'frontend';
-        }
-        return 'global';
-    }
-
-    private function countByArea(array $routes): array
-    {
-        $counts = [];
-        foreach ($routes as $r) {
-            $area = $r['area'];
-            $counts[$area] = ($counts[$area] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
-
-    private function countByRouter(array $routes): array
-    {
-        $counts = [];
-        foreach ($routes as $r) {
-            $router = $r['router'];
-            $counts[$router] = ($counts[$router] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
 }

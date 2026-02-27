@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MageContext\Output;
 
+use MageContext\Identity\IdentityResolver;
+
 /**
  * C.3: IndexBuilder — generates reverse indexes from extractor data.
  *
@@ -345,7 +347,6 @@ class IndexBuilder
      */
     private function normalizeClassId(string $class): string
     {
-        $class = ltrim($class, '\\');
-        return $class !== '' ? strtolower($class) : '';
+        return $class !== '' ? IdentityResolver::classId($class) : '';
     }
 }

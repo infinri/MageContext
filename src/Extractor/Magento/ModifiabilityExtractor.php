@@ -83,7 +83,7 @@ class ModifiabilityExtractor extends AbstractExtractor
             $finder->files()->in($scopePath)->name('di.xml')->sortByName();
 
             foreach ($finder as $file) {
-                $module = $this->resolveModuleFromPath(
+                $module = $this->moduleIdFromPath(
                     str_replace($repoPath . '/', '', $file->getRealPath())
                 );
 
@@ -111,7 +111,7 @@ class ModifiabilityExtractor extends AbstractExtractor
             $finder->files()->in($scopePath)->name('di.xml')->sortByName();
 
             foreach ($finder as $file) {
-                $module = $this->resolveModuleFromPath(
+                $module = $this->moduleIdFromPath(
                     str_replace($repoPath . '/', '', $file->getRealPath())
                 );
 
@@ -147,7 +147,7 @@ class ModifiabilityExtractor extends AbstractExtractor
             $finder->files()->in($scopePath)->name('di.xml')->sortByName();
 
             foreach ($finder as $file) {
-                $module = $this->resolveModuleFromPath(
+                $module = $this->moduleIdFromPath(
                     str_replace($repoPath . '/', '', $file->getRealPath())
                 );
 
@@ -255,7 +255,7 @@ class ModifiabilityExtractor extends AbstractExtractor
             $finder->files()->in($scopePath)->name('*.php')->sortByName();
 
             foreach ($finder as $file) {
-                $module = $this->resolveModuleFromPath(
+                $module = $this->moduleIdFromPath(
                     str_replace($repoPath . '/', '', $file->getRealPath())
                 );
 
@@ -294,7 +294,7 @@ class ModifiabilityExtractor extends AbstractExtractor
                 ->sortByName();
 
             foreach ($finder as $file) {
-                $module = $this->resolveModuleFromPath(
+                $module = $this->moduleIdFromPath(
                     str_replace($repoPath . '/', '', $file->getRealPath())
                 );
                 $this->addSignal($signals, $module, 'file_count', 1);
@@ -385,14 +385,6 @@ class ModifiabilityExtractor extends AbstractExtractor
             $signals[$module] = [];
         }
         $signals[$module][$key] = ($signals[$module][$key] ?? 0) + $value;
-    }
-
-    private function resolveModuleFromPath(string $relativePath): string
-    {
-        if (preg_match('#(?:app/code)/([^/]+)/([^/]+)/#', $relativePath, $match)) {
-            return $match[1] . '_' . $match[2];
-        }
-        return 'unknown';
     }
 
     private function avg(array $values): float

@@ -78,9 +78,9 @@ class ApiSurfaceExtractor extends AbstractExtractor
             'graphql_types' => $graphqlTypes,
             'summary' => [
                 'total_rest_endpoints' => count($restEndpoints),
-                'rest_by_method' => $this->countRestByMethod($restEndpoints),
+                'rest_by_method' => $this->countByField($restEndpoints, 'method'),
                 'total_graphql_types' => count($graphqlTypes),
-                'graphql_by_kind' => $this->countGraphqlByKind($graphqlTypes),
+                'graphql_by_kind' => $this->countByField($graphqlTypes, 'kind'),
             ],
         ];
     }
@@ -193,25 +193,4 @@ class ApiSurfaceExtractor extends AbstractExtractor
         return $types;
     }
 
-    private function countRestByMethod(array $endpoints): array
-    {
-        $counts = [];
-        foreach ($endpoints as $e) {
-            $method = $e['method'];
-            $counts[$method] = ($counts[$method] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
-
-    private function countGraphqlByKind(array $types): array
-    {
-        $counts = [];
-        foreach ($types as $t) {
-            $kind = $t['kind'];
-            $counts[$kind] = ($counts[$kind] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
 }

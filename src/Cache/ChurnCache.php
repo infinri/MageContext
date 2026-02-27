@@ -108,13 +108,30 @@ class ChurnCache
     }
 
     /**
-     * Get HEAD commit hash.
+     * Get HEAD commit hash via filesystem (no shell dependency).
      */
     public function getHeadCommit(): string
     {
-        $cmd = sprintf('cd %s && git rev-parse HEAD 2>/dev/null', escapeshellarg($this->repoPath));
-        $result = trim((string) shell_exec($cmd));
-        return $result !== '' ? $result : 'unknown';
+        if (!is_dir($this->repoPath . '/.git')) {
+            return 'unknown';
+        }
+
+        $headFile = $this->repoPath . '/.git/HEAD';
+        if (!is_file($headFile)) {
+            return 'unknown';
+        }
+
+        $head = trim((string) @file_get_contents($headFile));
+        if (str_starts_with($head, 'ref: ')) {
+            $refPath = $this->repoPath . '/.git/' . substr($head, 5);
+            if (is_file($refPath)) {
+                return trim((string) @file_get_contents($refPath));
+            }
+            return 'unknown';
+        }
+
+        // Detached HEAD — already a SHA
+        return $head !== '' ? $head : 'unknown';
     }
 
     /**

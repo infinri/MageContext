@@ -98,7 +98,7 @@ class CliCommandExtractor extends AbstractExtractor
             'commands' => $commands,
             'summary' => [
                 'total_commands' => count($commands),
-                'by_module' => $this->countByModule($commands),
+                'by_module' => $this->countByField($commands, 'declared_by'),
             ],
         ];
     }
@@ -226,14 +226,4 @@ class CliCommandExtractor extends AbstractExtractor
         ];
     }
 
-    private function countByModule(array $commands): array
-    {
-        $counts = [];
-        foreach ($commands as $cmd) {
-            $mod = $cmd['declared_by'];
-            $counts[$mod] = ($counts[$mod] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
 }

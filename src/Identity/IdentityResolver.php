@@ -68,12 +68,14 @@ class IdentityResolver
     }
 
     /**
-     * class_id: fully-qualified class name (FQCN).
+     * class_id: fully-qualified class name (FQCN), lowercased.
      * Always without leading backslash.
+     * Lowercased because PHP class names are case-insensitive,
+     * and this ensures consistent join keys across all outputs.
      */
     public static function classId(string $fqcn): string
     {
-        return ltrim($fqcn, '\\');
+        return strtolower(ltrim($fqcn, '\\'));
     }
 
     /**
@@ -126,16 +128,6 @@ class IdentityResolver
     public static function pluginId(string $pluginFqcn, string $type, string $subjectMethod): string
     {
         return self::classId($pluginFqcn) . '::' . $type . '::' . $subjectMethod;
-    }
-
-    /**
-     * scenario_id: stable hash of entry point identity.
-     * Deterministic for the same entry point across runs.
-     */
-    public static function scenarioId(string $type, string $entryClass, string $entryMethod = 'execute'): string
-    {
-        $raw = $type . ':' . self::classId($entryClass) . '::' . $entryMethod;
-        return substr(hash('sha256', $raw), 0, 12);
     }
 
     /**

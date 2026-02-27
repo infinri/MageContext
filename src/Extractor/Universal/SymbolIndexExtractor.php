@@ -114,7 +114,7 @@ class SymbolIndexExtractor extends AbstractExtractor
                 'total_symbols' => count($symbols),
                 'total_files_scanned' => $fileCount,
                 'parse_errors' => $parseErrors,
-                'by_type' => $this->countByType($symbols),
+                'by_type' => $this->countByField($symbols, 'symbol_type'),
             ],
         ];
     }
@@ -301,19 +301,4 @@ class SymbolIndexExtractor extends AbstractExtractor
         return $methods;
     }
 
-    /**
-     * Count symbols by type.
-     *
-     * @return array<string, int>
-     */
-    private function countByType(array $symbols): array
-    {
-        $counts = [];
-        foreach ($symbols as $s) {
-            $type = $s['symbol_type'];
-            $counts[$type] = ($counts[$type] ?? 0) + 1;
-        }
-        ksort($counts);
-        return $counts;
-    }
 }

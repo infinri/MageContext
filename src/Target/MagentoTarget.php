@@ -25,6 +25,14 @@ use MageContext\Extractor\Magento\RoutesExtractor;
 use MageContext\Extractor\Magento\CronMapExtractor;
 use MageContext\Extractor\Magento\CliCommandExtractor;
 use MageContext\Extractor\Magento\UiComponentExtractor;
+use MageContext\Extractor\Magento\CallGraphExtractor;
+use MageContext\Extractor\Magento\ServiceContractExtractor;
+use MageContext\Extractor\Magento\RepositoryPatternExtractor;
+use MageContext\Extractor\Magento\EntityRelationshipExtractor;
+use MageContext\Extractor\Magento\PluginSeamTimingExtractor;
+use MageContext\Extractor\Magento\SafeApiMatrixExtractor;
+use MageContext\Extractor\Magento\DtoDataInterfaceExtractor;
+use MageContext\Extractor\Magento\ImplementationPatternExtractor;
 
 class MagentoTarget implements TargetInterface
 {
@@ -100,6 +108,14 @@ class MagentoTarget implements TargetInterface
             new ArchitecturalDebtExtractor(),
             new HotspotRankingExtractor(),
             new AllocationExtractor(),
+            new CallGraphExtractor(),
+            new ServiceContractExtractor(),
+            new RepositoryPatternExtractor(),
+            new EntityRelationshipExtractor(),
+            new PluginSeamTimingExtractor(),
+            new SafeApiMatrixExtractor(),
+            new DtoDataInterfaceExtractor(),
+            new ImplementationPatternExtractor(),
         ];
     }
 

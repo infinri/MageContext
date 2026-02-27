@@ -6,6 +6,7 @@ namespace MageContext\Tests\Hardening;
 
 use MageContext\Cache\ChurnCache;
 use MageContext\Config\CompilerConfig;
+use MageContext\Tests\Support\TempDirectoryTrait;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -17,12 +18,11 @@ use PHPUnit\Framework\TestCase;
  */
 class ChurnCacheTest extends TestCase
 {
-    private string $tmpDir;
+    use TempDirectoryTrait;
 
     protected function setUp(): void
     {
-        $this->tmpDir = sys_get_temp_dir() . '/magecontext-churn-test-' . uniqid();
-        mkdir($this->tmpDir, 0755, true);
+        $this->createTmpDir('churn-test');
 
         // Create a minimal git repo for cache commit detection
         shell_exec(sprintf('cd %s && git init && git commit --allow-empty -m "init" 2>/dev/null', escapeshellarg($this->tmpDir)));
@@ -209,18 +209,4 @@ class ChurnCacheTest extends TestCase
         $this->assertSame(365, $config->getChurnWindowDays());
     }
 
-    private function removeDir(string $dir): void
-    {
-        if (!is_dir($dir)) {
-            return;
-        }
-        $items = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
-        );
-        foreach ($items as $item) {
-            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
-        }
-        rmdir($dir);
-    }
 }

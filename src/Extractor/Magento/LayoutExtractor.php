@@ -69,7 +69,7 @@ class LayoutExtractor extends AbstractExtractor
                     + $this->countType($handles, 'referenceContainer'),
                 'total_moves' => $this->countType($handles, 'move'),
                 'total_removes' => $this->countType($handles, 'remove'),
-                'by_area' => $this->countByArea($handles),
+                'by_area' => $this->countByField($handles, 'area'),
             ],
         ];
     }
@@ -192,31 +192,9 @@ class LayoutExtractor extends AbstractExtractor
         return $map;
     }
 
-    private function detectArea(string $relativePath): string
-    {
-        $normalized = str_replace('\\', '/', $relativePath);
-        if (str_contains($normalized, '/adminhtml/')) {
-            return 'adminhtml';
-        }
-        if (str_contains($normalized, '/frontend/')) {
-            return 'frontend';
-        }
-        return 'base';
-    }
-
     private function countType(array $handles, string $type): int
     {
         return count(array_filter($handles, fn($h) => ($h['type'] ?? '') === $type));
     }
 
-    private function countByArea(array $handles): array
-    {
-        $counts = [];
-        foreach ($handles as $h) {
-            $area = $h['area'];
-            $counts[$area] = ($counts[$area] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
 }

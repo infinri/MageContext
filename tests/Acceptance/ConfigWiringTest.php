@@ -50,7 +50,7 @@ class ConfigWiringTest extends TestCase
         $this->assertTrue($config->isChurnEnabled());
         $this->assertSame(365, $config->getChurnWindowDays());
         $this->assertTrue($config->isChurnCacheEnabled());
-        $this->assertSame(10, $config->getMaxReverseIndexSizeMb());
+        $this->assertSame(12, $config->getMaxReverseIndexSizeMb());
     }
 
     public function testConfigFileOverridesDefaults(): void

@@ -66,7 +66,7 @@ class ExecutionPathExtractor extends AbstractExtractor
             'summary' => [
                 'total_entry_points' => count($entryPoints),
                 'total_paths' => count($paths),
-                'by_type' => $this->countByType($entryPoints),
+                'by_type' => $this->countByField($entryPoints, 'type'),
                 'avg_plugin_depth' => $this->avgField($paths, 'plugin_depth'),
                 'avg_observer_count' => $this->avgField($paths, 'observer_count'),
                 'max_plugin_depth' => $this->maxField($paths, 'plugin_depth'),
@@ -397,7 +397,7 @@ class ExecutionPathExtractor extends AbstractExtractor
                                 'plugin_name' => $pluginName,
                                 'plugin_class' => $pluginClass,
                                 'sort_order' => $sortOrder,
-                                'module' => $this->resolveModuleFromClass($pluginClass),
+                                'module' => IdentityResolver::moduleIdFromClass($pluginClass),
                             ];
                         }
                     }
@@ -461,7 +461,7 @@ class ExecutionPathExtractor extends AbstractExtractor
                             $map[$eventName][] = [
                                 'observer_name' => $observerName,
                                 'observer_class' => $observerClass,
-                                'module' => $this->resolveModuleFromClass($observerClass),
+                                'module' => IdentityResolver::moduleIdFromClass($observerClass),
                             ];
                         }
                     }
@@ -542,23 +542,6 @@ class ExecutionPathExtractor extends AbstractExtractor
         return null;
     }
 
-    private function resolveModuleFromPath(string $relativePath): string
-    {
-        if (preg_match('#(?:app/code)/([^/]+)/([^/]+)/#', $relativePath, $match)) {
-            return $match[1] . '_' . $match[2];
-        }
-        return 'unknown';
-    }
-
-    private function resolveModuleFromClass(string $className): string
-    {
-        $parts = explode('\\', ltrim($className, '\\'));
-        if (count($parts) >= 2) {
-            return $parts[0] . '_' . $parts[1];
-        }
-        return $className;
-    }
-
     /**
      * Convert a class name to a scenario-style name.
      * e.g., SecondSwing\Checkout\Controller\Cart\Add => checkout.cart.add
@@ -570,17 +553,6 @@ class ExecutionPathExtractor extends AbstractExtractor
         $relevant = array_slice($parts, 2);
         $name = implode('.', array_map('strtolower', $relevant));
         return $name ?: 'unknown';
-    }
-
-    private function countByType(array $entryPoints): array
-    {
-        $counts = [];
-        foreach ($entryPoints as $ep) {
-            $type = $ep['type'];
-            $counts[$type] = ($counts[$type] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
     }
 
     private function avgField(array $paths, string $field): float

@@ -6,6 +6,7 @@ namespace MageContext\Extractor\Magento;
 
 use MageContext\Extractor\AbstractExtractor;
 use MageContext\Identity\Evidence;
+use MageContext\Identity\IdentityResolver;
 use Symfony\Component\Finder\Finder;
 
 /**
@@ -30,8 +31,25 @@ class ArchitecturalDebtExtractor extends AbstractExtractor
 
     public function extract(string $repoPath, array $scopes): array
     {
-        // 1. Build module dependency graph
-        $graph = $this->buildDependencyGraph($repoPath, $scopes);
+        // 1. Build module dependency graph (adjacency list from shared edge scanner)
+        $scan = $this->scanDependencyEdges($repoPath, $scopes);
+        $graph = [];
+        foreach ($scan['modules'] as $mod) {
+            $graph[$mod] = [];
+        }
+        foreach ($scan['edges'] as $edge) {
+            $from = $edge['from'];
+            $to = $edge['to'];
+            if (!isset($graph[$from])) {
+                $graph[$from] = [];
+            }
+            if (!in_array($to, $graph[$from], true)) {
+                $graph[$from][] = $to;
+            }
+            if (!isset($graph[$to])) {
+                $graph[$to] = [];
+            }
+        }
 
         // 2. Detect circular dependencies
         $cycles = $this->detectCycles($graph);
@@ -99,114 +117,9 @@ class ArchitecturalDebtExtractor extends AbstractExtractor
                 'circular_dependencies' => count($cycles),
                 'god_modules' => count($godModules),
                 'multiple_overrides' => count($multipleOverrides),
-                'by_severity' => $this->countBySeverity($debtItems),
+                'by_severity' => $this->countByField($debtItems, 'severity'),
             ],
         ];
-    }
-
-    /**
-     * Build a directed dependency graph from module.xml sequence dependencies.
-     *
-     * @return array<string, array<string>> module => [dependencies]
-     */
-    private function buildDependencyGraph(string $repoPath, array $scopes): array
-    {
-        $graph = [];
-
-        foreach ($scopes as $scope) {
-            $scopePath = $repoPath . '/' . trim($scope, '/');
-            if (!is_dir($scopePath)) {
-                continue;
-            }
-
-            $finder = new Finder();
-            $finder->files()
-                ->in($scopePath)
-                ->name('module.xml')
-                ->path('/^[^\/]+\/[^\/]+\/etc\//')
-                ->sortByName();
-
-            foreach ($finder as $file) {
-                $xml = @simplexml_load_file($file->getRealPath());
-                if ($xml === false) {
-                    continue;
-                }
-
-                $moduleNode = $xml->module ?? null;
-                if ($moduleNode === null) {
-                    continue;
-                }
-
-                $name = (string) ($moduleNode['name'] ?? '');
-                if ($name === '') {
-                    continue;
-                }
-
-                if (!isset($graph[$name])) {
-                    $graph[$name] = [];
-                }
-
-                if (isset($moduleNode->sequence)) {
-                    foreach ($moduleNode->sequence->module as $dep) {
-                        $depName = (string) ($dep['name'] ?? '');
-                        if ($depName !== '') {
-                            $graph[$name][] = $depName;
-                            // Ensure dep exists in graph
-                            if (!isset($graph[$depName])) {
-                                $graph[$depName] = [];
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Also add DI-based dependencies (preferences, plugins)
-            $diFinder = new Finder();
-            $diFinder->files()->in($scopePath)->name('di.xml')->sortByName();
-
-            foreach ($diFinder as $file) {
-                $relativePath = str_replace($repoPath . '/', '', $file->getRealPath());
-                $ownerModule = $this->resolveModuleFromPath($relativePath);
-                if ($ownerModule === 'unknown') {
-                    continue;
-                }
-
-                $xml = @simplexml_load_file($file->getRealPath());
-                if ($xml === false) {
-                    continue;
-                }
-
-                // Preferences create dependency on the interface's module
-                foreach ($xml->xpath('//preference') ?: [] as $node) {
-                    $for = (string) ($node['for'] ?? '');
-                    $depModule = $this->resolveModuleFromClass($for);
-                    if ($depModule !== 'unknown' && $depModule !== $ownerModule) {
-                        if (!isset($graph[$ownerModule])) {
-                            $graph[$ownerModule] = [];
-                        }
-                        if (!in_array($depModule, $graph[$ownerModule], true)) {
-                            $graph[$ownerModule][] = $depModule;
-                        }
-                    }
-                }
-
-                // Plugins create dependency on target class's module
-                foreach ($xml->xpath('//type') ?: [] as $typeNode) {
-                    $targetClass = (string) ($typeNode['name'] ?? '');
-                    $depModule = $this->resolveModuleFromClass($targetClass);
-                    if ($depModule !== 'unknown' && $depModule !== $ownerModule) {
-                        if (!isset($graph[$ownerModule])) {
-                            $graph[$ownerModule] = [];
-                        }
-                        if (!in_array($depModule, $graph[$ownerModule], true)) {
-                            $graph[$ownerModule][] = $depModule;
-                        }
-                    }
-                }
-            }
-        }
-
-        return $graph;
     }
 
     /**
@@ -341,7 +254,7 @@ class ArchitecturalDebtExtractor extends AbstractExtractor
 
             foreach ($finder as $file) {
                 $relativePath = str_replace($repoPath . '/', '', $file->getRealPath());
-                $ownerModule = $this->resolveModuleFromPath($relativePath);
+                $ownerModule = $this->moduleIdFromPath($relativePath);
 
                 $xml = @simplexml_load_file($file->getRealPath());
                 if ($xml === false) {
@@ -380,30 +293,4 @@ class ArchitecturalDebtExtractor extends AbstractExtractor
         return $result;
     }
 
-    private function resolveModuleFromPath(string $relativePath): string
-    {
-        if (preg_match('#(?:app/code)/([^/]+)/([^/]+)/#', $relativePath, $match)) {
-            return $match[1] . '_' . $match[2];
-        }
-        return 'unknown';
-    }
-
-    private function resolveModuleFromClass(string $className): string
-    {
-        $parts = explode('\\', ltrim($className, '\\'));
-        if (count($parts) >= 2) {
-            return $parts[0] . '_' . $parts[1];
-        }
-        return 'unknown';
-    }
-
-    private function countBySeverity(array $items): array
-    {
-        $counts = [];
-        foreach ($items as $item) {
-            $severity = $item['severity'];
-            $counts[$severity] = ($counts[$severity] ?? 0) + 1;
-        }
-        return $counts;
-    }
 }

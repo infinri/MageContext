@@ -86,7 +86,7 @@ class ObserverExtractor extends AbstractExtractor
                 'high_risk_events' => count($highRiskEvents),
                 'high_fanout_events' => count(array_filter($eventGraph, fn($e) => $e['listener_count'] > $eventFanoutThreshold)),
                 'disabled_observers' => count(array_filter($observers, fn($o) => $o['disabled'])),
-                'by_scope' => $this->countByScope($observers),
+                'by_scope' => $this->countByField($observers, 'scope'),
                 'most_observed_events' => $this->topEvents($eventGraph, 10),
             ],
         ];
@@ -269,17 +269,6 @@ class ObserverExtractor extends AbstractExtractor
         }
 
         return 'global';
-    }
-
-    private function countByScope(array $observers): array
-    {
-        $counts = [];
-        foreach ($observers as $o) {
-            $scope = $o['scope'];
-            $counts[$scope] = ($counts[$scope] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
     }
 
     /**

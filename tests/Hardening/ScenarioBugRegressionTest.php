@@ -7,6 +7,7 @@ namespace MageContext\Tests\Hardening;
 use MageContext\Extractor\Magento\DeviationExtractor;
 use MageContext\Output\ScenarioBundleGenerator;
 use MageContext\Output\ScenarioSeedResolver;
+use MageContext\Tests\Support\TempDirectoryTrait;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,8 @@ use PHPUnit\Framework\TestCase;
  */
 class ScenarioBugRegressionTest extends TestCase
 {
+    use TempDirectoryTrait;
+
     /**
      * Bug 1 regression: Fallback scenario_ids must be unique per scenario.
      *
@@ -219,18 +222,4 @@ class ScenarioBugRegressionTest extends TestCase
         ];
     }
 
-    private function removeDir(string $dir): void
-    {
-        if (!is_dir($dir)) {
-            return;
-        }
-        $items = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
-        );
-        foreach ($items as $item) {
-            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
-        }
-        rmdir($dir);
-    }
 }

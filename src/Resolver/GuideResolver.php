@@ -19,27 +19,7 @@ class GuideResolver
      */
     public function load(): void
     {
-        $manifestPath = $this->contextDir . '/manifest.json';
-        if (!is_file($manifestPath)) {
-            throw new \RuntimeException(
-                "No compiled context found at {$this->contextDir}. Run 'compile' first."
-            );
-        }
-
-        $manifest = json_decode(file_get_contents($manifestPath), true);
-
-        foreach ($manifest['files'] ?? [] as $relativePath) {
-            $fullPath = $this->contextDir . '/' . $relativePath;
-            if (!is_file($fullPath)) {
-                continue;
-            }
-
-            $ext = pathinfo($fullPath, PATHINFO_EXTENSION);
-            if ($ext === 'json') {
-                $key = pathinfo($relativePath, PATHINFO_FILENAME);
-                $this->index[$key] = json_decode(file_get_contents($fullPath), true);
-            }
-        }
+        $this->index = BundleLoader::load($this->contextDir);
     }
 
     /**
@@ -73,8 +53,16 @@ class GuideResolver
         $guide['execution_context'] = $this->findExecutionContext($areas);
         $guide['test_pointers'] = $this->generateTestPointers($areas, $task);
         $guide['risk_assessment'] = $this->assessRisk($areas);
+        $guide['service_contracts'] = $this->findServiceContracts($areas);
+        $guide['repository_guide'] = $this->findRepositoryGuide($areas);
+        $guide['entity_context'] = $this->findEntityContext($areas);
+        $guide['delegation_context'] = $this->findDelegationContext($areas);
+        $guide['plugin_seam_guide'] = $this->findPluginSeamGuide($areas);
+        $guide['api_safety'] = $this->findApiSafety($areas);
+        $guide['implementation_guide'] = $this->findImplementationGuide($areas);
 
-        return $guide;
+        // Filter out empty sections
+        return array_filter($guide, fn($v) => !empty($v));
     }
 
     /**
@@ -88,7 +76,7 @@ class GuideResolver
         $locations = [];
 
         // Find modules matching the requested areas
-        $matchedModules = $this->filterByAreas($modules, $areas, ['name', 'path']);
+        $matchedModules = BundleLoader::filterRecords($modules, $areas, ['name', 'path']);
 
         foreach ($matchedModules as $mod) {
             $locations[] = [
@@ -108,7 +96,7 @@ class GuideResolver
         }
 
         // Find relevant routes for the areas
-        $matchedRoutes = $this->filterByAreas($routes, $areas, ['route_id', 'front_name']);
+        $matchedRoutes = BundleLoader::filterRecords($routes, $areas, ['route_id', 'front_name']);
         if (!empty($matchedRoutes)) {
             $locations[] = [
                 'module' => 'Existing routes',
@@ -129,7 +117,7 @@ class GuideResolver
 
         // Plugins on classes related to these areas
         $plugins = $this->index['plugin_chains']['plugins'] ?? [];
-        $matchedPlugins = $this->filterByAreas($plugins, $areas, ['target_class', 'plugin_class', 'source_file']);
+        $matchedPlugins = BundleLoader::filterRecords($plugins, $areas, ['target_class', 'plugin_class', 'source_file']);
 
         if (!empty($matchedPlugins)) {
             $byTarget = [];
@@ -151,7 +139,7 @@ class GuideResolver
 
         // Observers for events in these areas
         $observers = $this->index['event_graph']['observers'] ?? [];
-        $matchedObservers = $this->filterByAreas($observers, $areas, ['event_name', 'observer_class', 'source_file']);
+        $matchedObservers = BundleLoader::filterRecords($observers, $areas, ['event_name', 'observer_class', 'source_file']);
 
         if (!empty($matchedObservers)) {
             $byEvent = [];
@@ -196,17 +184,17 @@ class GuideResolver
         $patterns = [];
 
         // Check what extension mechanism is dominant
-        $plugins = $this->filterByAreas(
+        $plugins = BundleLoader::filterRecords(
             $this->index['plugin_chains']['plugins'] ?? [],
             $areas,
             ['target_class', 'plugin_class', 'source_file']
         );
-        $observers = $this->filterByAreas(
+        $observers = BundleLoader::filterRecords(
             $this->index['event_graph']['observers'] ?? [],
             $areas,
             ['event_name', 'observer_class', 'source_file']
         );
-        $prefs = $this->filterByKeywords(
+        $prefs = BundleLoader::filterRecords(
             $this->index['di_resolution_map']['resolutions'] ?? [],
             $areas,
             ['interface', 'di_target_id']
@@ -235,7 +223,7 @@ class GuideResolver
         }
 
         // Check for UI component patterns
-        $uiComponents = $this->filterByAreas(
+        $uiComponents = BundleLoader::filterRecords(
             $this->index['ui_components']['components'] ?? [],
             $areas,
             ['name', 'source_file']
@@ -250,7 +238,7 @@ class GuideResolver
         }
 
         // Check for layout patterns
-        $layout = $this->filterByAreas(
+        $layout = BundleLoader::filterRecords(
             $this->index['layout_handles']['handles'] ?? [],
             $areas,
             ['handle', 'name', 'source_file']
@@ -272,7 +260,7 @@ class GuideResolver
     private function findAntiPatterns(array $areas): array
     {
         $deviations = $this->index['custom_deviations']['deviations'] ?? [];
-        $matched = $this->filterByAreas($deviations, $areas, ['message', 'source_file', 'type']);
+        $matched = BundleLoader::filterRecords($deviations, $areas, ['message', 'source_file', 'type']);
 
         $antiPatterns = [];
 
@@ -334,7 +322,7 @@ class GuideResolver
     private function findExecutionContext(array $areas): array
     {
         $paths = $this->index['execution_paths']['paths'] ?? [];
-        $matched = $this->filterByAreas($paths, $areas, ['entry_class', 'module', 'scenario']);
+        $matched = BundleLoader::filterRecords($paths, $areas, ['entry_class', 'module', 'scenario']);
 
         if (empty($matched)) {
             return [];
@@ -355,7 +343,7 @@ class GuideResolver
     private function findRelatedModules(array $areas): array
     {
         $modules = $this->index['modules']['modules'] ?? [];
-        $matched = $this->filterByAreas($modules, $areas, ['name', 'path']);
+        $matched = BundleLoader::filterRecords($modules, $areas, ['name', 'path']);
 
         // Also find modules that depend on matched modules
         $matchedNames = array_column($matched, 'name');
@@ -389,7 +377,7 @@ class GuideResolver
 
         // Find existing test directories for matched modules
         $modules = $this->index['modules']['modules'] ?? [];
-        $matched = $this->filterByAreas($modules, $areas, ['name', 'path']);
+        $matched = BundleLoader::filterRecords($modules, $areas, ['name', 'path']);
 
         foreach ($matched as $mod) {
             $testDir = $mod['path'] . '/Test';
@@ -401,7 +389,7 @@ class GuideResolver
         }
 
         // General test recommendations based on what extension points are used
-        $plugins = $this->filterByAreas(
+        $plugins = BundleLoader::filterRecords(
             $this->index['plugin_chains']['plugins'] ?? [],
             $areas,
             ['target_class', 'plugin_class', 'source_file']
@@ -418,7 +406,7 @@ class GuideResolver
             ];
         }
 
-        $observers = $this->filterByAreas(
+        $observers = BundleLoader::filterRecords(
             $this->index['event_graph']['observers'] ?? [],
             $areas,
             ['event_name', 'observer_class', 'source_file']
@@ -440,22 +428,28 @@ class GuideResolver
     /**
      * Assess risk of working in these areas based on deviation density and complexity.
      */
+    private static function maxRisk(string $a, string $b): string
+    {
+        $ordinal = ['low' => 0, 'medium' => 1, 'high' => 2];
+        return ($ordinal[$b] ?? 0) > ($ordinal[$a] ?? 0) ? $b : $a;
+    }
+
     private function assessRisk(array $areas): array
     {
         $deviations = $this->index['custom_deviations']['deviations'] ?? [];
-        $matched = $this->filterByAreas($deviations, $areas, ['message', 'source_file', 'type']);
+        $matched = BundleLoader::filterRecords($deviations, $areas, ['message', 'source_file', 'type']);
 
         $critical = count(array_filter($matched, fn($d) => $d['severity'] === 'critical'));
         $high = count(array_filter($matched, fn($d) => $d['severity'] === 'high'));
 
-        $plugins = $this->filterByAreas(
+        $plugins = BundleLoader::filterRecords(
             $this->index['plugin_chains']['plugins'] ?? [],
             $areas,
             ['target_class', 'plugin_class', 'source_file']
         );
 
         $hotspots = $this->index['git_churn_hotspots']['hotspots'] ?? [];
-        $hotFiles = $this->filterByAreas($hotspots, $areas, ['file']);
+        $hotFiles = BundleLoader::filterRecords($hotspots, $areas, ['file']);
 
         $riskLevel = 'low';
         $reasons = [];
@@ -465,11 +459,11 @@ class GuideResolver
             $reasons[] = "{$critical} critical deviation(s) in this area";
         }
         if ($high > 3) {
-            $riskLevel = max($riskLevel, 'medium');
+            $riskLevel = self::maxRisk($riskLevel, 'medium');
             $reasons[] = "{$high} high-severity deviation(s)";
         }
         if (count($plugins) > 10) {
-            $riskLevel = max($riskLevel, 'medium');
+            $riskLevel = self::maxRisk($riskLevel, 'medium');
             $reasons[] = count($plugins) . " plugins intercepting classes in this area — high interception density";
         }
         if (count($hotFiles) > 3) {
@@ -477,7 +471,7 @@ class GuideResolver
         }
         // Check modifiability risk
         $modifiability = $this->index['modifiability']['modules'] ?? [];
-        $matchedMod = $this->filterByAreas($modifiability, $areas, ['module']);
+        $matchedMod = BundleLoader::filterRecords($modifiability, $areas, ['module']);
         $highRiskModules = count(array_filter($matchedMod, fn($m) => ($m['modifiability_risk_score'] ?? 0) >= 0.7));
         if ($highRiskModules > 0) {
             $riskLevel = 'high';
@@ -486,7 +480,7 @@ class GuideResolver
 
         // Check architectural debt
         $debtItems = $this->index['architectural_debt']['debt_items'] ?? [];
-        $matchedDebt = $this->filterByAreas($debtItems, $areas, ['description']);
+        $matchedDebt = BundleLoader::filterRecords($debtItems, $areas, ['description']);
         if (count($matchedDebt) > 0) {
             if (count(array_filter($matchedDebt, fn($d) => $d['severity'] === 'high')) > 0) {
                 $riskLevel = 'high';
@@ -496,7 +490,7 @@ class GuideResolver
 
         // Check layer violations
         $layerViolations = $this->index['layer_classification']['violations'] ?? [];
-        $matchedViolations = $this->filterByAreas($layerViolations, $areas, ['module', 'from', 'to']);
+        $matchedViolations = BundleLoader::filterRecords($layerViolations, $areas, ['module', 'from', 'to']);
         if (count($matchedViolations) > 0) {
             $reasons[] = count($matchedViolations) . ' layer violation(s) in this area';
         }
@@ -519,35 +513,176 @@ class GuideResolver
         ];
     }
 
-    /**
-     * Filter records by checking if any area keyword matches any of the specified fields.
-     */
-    private function filterByAreas(array $records, array $areas, array $fields): array
-    {
-        $matched = [];
-        foreach ($records as $record) {
-            foreach ($fields as $field) {
-                $value = $record[$field] ?? '';
-                if (!is_string($value)) {
-                    continue;
-                }
-                foreach ($areas as $area) {
-                    if (stripos($value, $area) !== false) {
-                        $matched[] = $record;
-                        continue 3;
-                    }
-                }
-            }
-        }
-        return $matched;
-    }
-
     private function suggestLocation(array $module, array $areas): string
     {
         $name = $module['name'] ?? '';
         $path = $module['path'] ?? '';
 
         return "Existing module '{$name}' at {$path} covers this area. Add new logic here if it fits the module's responsibility.";
+    }
+
+    private function findServiceContracts(array $areas): array
+    {
+        $contracts = $this->index['service_contracts']['contracts'] ?? [];
+        $matched = BundleLoader::filterRecords($contracts, $areas, ['interface', 'module', 'source_file']);
+        if (empty($matched)) {
+            return [];
+        }
+
+        return [
+            'description' => 'Service contract interfaces available in this area',
+            'count' => count($matched),
+            'contracts' => array_map(fn($c) => [
+                'interface' => $c['interface'],
+                'method_count' => $c['method_count'] ?? 0,
+                'has_di_binding' => !empty($c['di_bindings']),
+                'webapi_exposed' => !empty($c['webapi_routes']),
+            ], $matched),
+        ];
+    }
+
+    private function findRepositoryGuide(array $areas): array
+    {
+        $repos = $this->index['repository_patterns']['repositories'] ?? [];
+        $matched = BundleLoader::filterRecords($repos, $areas, ['interface', 'entity_name', 'module']);
+        if (empty($matched)) {
+            return [];
+        }
+
+        $guide = $this->index['repository_patterns']['search_criteria_guide'] ?? [];
+        $matchedGuide = BundleLoader::filterRecords($guide, $areas, ['interface', 'entity']);
+
+        return [
+            'description' => 'Repository interfaces and lookup patterns for this area',
+            'repositories' => array_map(fn($r) => [
+                'interface' => $r['interface'],
+                'entity' => $r['entity_name'],
+                'has_get_list' => $r['has_get_list'] ?? false,
+                'supports_search_criteria' => $r['supports_search_criteria'] ?? false,
+                'crud_score' => $r['crud_score'] ?? 0,
+            ], $matched),
+            'search_criteria_guide' => $matchedGuide,
+        ];
+    }
+
+    private function findEntityContext(array $areas): array
+    {
+        $entities = $this->index['entity_relationships']['entities'] ?? [];
+        $matched = BundleLoader::filterRecords($entities, $areas, ['entity_class', 'table', 'module']);
+        if (empty($matched)) {
+            return [];
+        }
+
+        $relationships = $this->index['entity_relationships']['relationships'] ?? [];
+        $tables = array_column($matched, 'table');
+        $relatedRels = array_filter($relationships, fn($r) =>
+            in_array($r['from_table'] ?? '', $tables, true) ||
+            in_array($r['to_table'] ?? '', $tables, true)
+        );
+
+        $invariants = $this->index['entity_relationships']['domain_invariants'] ?? [];
+        $matchedInvariants = BundleLoader::filterRecords($invariants, $areas, ['class', 'module']);
+
+        return [
+            'description' => 'Entity classes, table mappings, and domain constraints',
+            'entities' => array_map(fn($e) => [
+                'class' => $e['entity_class'],
+                'table' => $e['table'],
+                'type' => $e['type'] ?? 'flat',
+                'id_field' => $e['id_field'] ?? null,
+            ], $matched),
+            'relationships' => array_values($relatedRels),
+            'domain_invariants' => $matchedInvariants,
+        ];
+    }
+
+    private function findDelegationContext(array $areas): array
+    {
+        $chains = $this->index['call_graph']['delegation_chains'] ?? [];
+        $matched = BundleLoader::filterRecords($chains, $areas, ['service_interface', 'final_concrete', 'module', 'url']);
+        if (empty($matched)) {
+            return [];
+        }
+
+        $guestPairs = $this->index['call_graph']['guest_auth_pairs'] ?? [];
+        $matchedPairs = BundleLoader::filterRecords($guestPairs, $areas, ['guest_interface', 'auth_interface']);
+
+        return [
+            'description' => 'Delegation chains showing how entry points resolve to concrete classes',
+            'chains' => array_map(fn($c) => [
+                'context' => $c['context'],
+                'interface' => $c['service_interface'],
+                'concrete' => $c['final_concrete'],
+                'depth' => $c['delegation_depth'] ?? 0,
+                'has_divergence' => $c['has_cross_area_divergence'] ?? false,
+            ], array_slice($matched, 0, 20)),
+            'guest_auth_pairs' => $matchedPairs,
+            'total_chains' => count($matched),
+        ];
+    }
+
+    private function findPluginSeamGuide(array $areas): array
+    {
+        $seams = $this->index['plugin_seam_timing']['seams'] ?? [];
+        $matched = BundleLoader::filterRecords($seams, $areas, ['target_class', 'target_method', 'seam_id']);
+        if (empty($matched)) {
+            return [];
+        }
+
+        $highRisk = array_filter($matched, fn($s) => ($s['risk_level'] ?? 'low') !== 'low');
+
+        return [
+            'description' => 'Plugin seams with timing, side-effect warnings, and recommendations',
+            'total_seams' => count($matched),
+            'high_risk_seams' => array_values(array_map(fn($s) => [
+                'target' => $s['target_class'] . '::' . $s['target_method'],
+                'risk_level' => $s['risk_level'] ?? 'low',
+                'total_plugins' => $s['total_plugins'] ?? 0,
+                'has_around' => $s['has_around'] ?? false,
+                'recommendations' => $s['recommendations'] ?? [],
+            ], $highRisk)),
+        ];
+    }
+
+    private function findApiSafety(array $areas): array
+    {
+        $matrix = $this->index['safe_api_matrix']['class_matrix'] ?? [];
+        $matched = BundleLoader::filterRecords($matrix, $areas, ['class', 'module']);
+        if (empty($matched)) {
+            return [];
+        }
+
+        $deprecated = $this->index['safe_api_matrix']['deprecated_methods'] ?? [];
+        $matchedDeprecated = BundleLoader::filterRecords($deprecated, $areas, ['class', 'method_id']);
+
+        return [
+            'description' => 'API stability classification — safe vs internal vs deprecated methods',
+            'classes_analyzed' => count($matched),
+            'deprecated_methods' => array_map(fn($d) => [
+                'method' => $d['method_id'] ?? $d['method'],
+                'replacement' => $d['replacement'] ?? null,
+            ], $matchedDeprecated),
+        ];
+    }
+
+    private function findImplementationGuide(array $areas): array
+    {
+        $impls = $this->index['implementation_patterns']['implementations'] ?? [];
+        $matched = BundleLoader::filterRecords($impls, $areas, ['interface', 'concrete_class', 'module']);
+        if (empty($matched)) {
+            return [];
+        }
+
+        return [
+            'description' => 'Concrete implementation patterns — constructor dependencies and design patterns used',
+            'implementations' => array_map(fn($i) => [
+                'interface' => $i['interface'],
+                'concrete' => $i['concrete_class'],
+                'dependency_count' => $i['dependency_count'] ?? 0,
+                'patterns' => $i['patterns'] ?? [],
+                'extra_methods_count' => count($i['extra_methods'] ?? []),
+            ], $matched),
+        ];
     }
 
     private function suggestTests(array $module, string $task): array

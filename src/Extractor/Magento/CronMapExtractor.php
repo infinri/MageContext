@@ -66,8 +66,8 @@ class CronMapExtractor extends AbstractExtractor
             'cron_jobs' => $cronJobs,
             'summary' => [
                 'total_cron_jobs' => count($cronJobs),
-                'by_group' => $this->countByGroup($cronJobs),
-                'by_module' => $this->countByModule($cronJobs),
+                'by_group' => $this->countByField($cronJobs, 'group'),
+                'by_module' => $this->countByField($cronJobs, 'declared_by'),
             ],
         ];
     }
@@ -134,25 +134,4 @@ class CronMapExtractor extends AbstractExtractor
         return $jobs;
     }
 
-    private function countByGroup(array $cronJobs): array
-    {
-        $counts = [];
-        foreach ($cronJobs as $job) {
-            $group = $job['group'];
-            $counts[$group] = ($counts[$group] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
-
-    private function countByModule(array $cronJobs): array
-    {
-        $counts = [];
-        foreach ($cronJobs as $job) {
-            $mod = $job['declared_by'];
-            $counts[$mod] = ($counts[$mod] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
 }

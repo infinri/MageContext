@@ -90,7 +90,7 @@ class DependencyGraphExtractor extends AbstractExtractor
             'summary' => [
                 'total_edges' => count($moduleEdges),
                 'total_modules_analyzed' => count($allModules),
-                'edge_type_counts' => $this->countByEdgeType($moduleEdges),
+                'edge_type_counts' => $this->countByField($moduleEdges, 'edge_type'),
                 'avg_instability' => $couplingMetrics['composite']['avg_instability'] ?? 0,
             ],
         ], $this->integrityMeta());
@@ -598,17 +598,6 @@ class DependencyGraphExtractor extends AbstractExtractor
             'modules' => $metrics,
             'avg_instability' => $counted > 0 ? round($instabilitySum / $counted, 3) : 0,
         ];
-    }
-
-    private function countByEdgeType(array $edges): array
-    {
-        $counts = [];
-        foreach ($edges as $edge) {
-            $type = $edge['edge_type'];
-            $counts[$type] = ($counts[$type] ?? 0) + 1;
-        }
-        ksort($counts);
-        return $counts;
     }
 
     private function isBuiltinType(string $name): bool

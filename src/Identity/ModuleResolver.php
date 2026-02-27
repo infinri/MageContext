@@ -59,6 +59,15 @@ class ModuleResolver
      */
     private array $classCache = [];
 
+    /**
+     * PSR-4 namespace prefix → absolute base directory.
+     * Used by resolveClassFile() to map FQCN → file path.
+     * Sorted by longest prefix first (parallel to $psr4Map).
+     *
+     * @var array<string, string>
+     */
+    private array $psr4Dirs = [];
+
     private string $repoPath;
     private bool $built = false;
 
@@ -77,6 +86,7 @@ class ModuleResolver
     {
         $this->modules = [];
         $this->psr4Map = [];
+        $this->psr4Dirs = [];
         $this->fileCache = [];
         $this->classCache = [];
 
@@ -95,6 +105,7 @@ class ModuleResolver
 
         // Sort PSR-4 map by longest prefix first (most specific match wins)
         uksort($this->psr4Map, fn(string $a, string $b) => strlen($b) <=> strlen($a));
+        uksort($this->psr4Dirs, fn(string $a, string $b) => strlen($b) <=> strlen($a));
 
         $this->built = true;
     }
@@ -240,8 +251,28 @@ class ModuleResolver
             $composerName = $json['name'] ?? null;
             $psr4 = $json['autoload']['psr-4'] ?? [];
 
+            // Always store PSR-4 dirs for class→file resolution,
+            // even for packages where moduleIdFromPath returns 'unknown'
+            $moduleAbsPath = dirname($file->getRealPath());
+            foreach ($psr4 as $nsPrefix => $nsPaths) {
+                $normalizedPrefix = rtrim($nsPrefix, '\\') . '\\';
+                $srcDir = is_array($nsPaths) ? ($nsPaths[0] ?? '') : $nsPaths;
+                $srcDir = rtrim($srcDir, '/');
+                $this->psr4Dirs[$normalizedPrefix] = $srcDir !== ''
+                    ? $moduleAbsPath . '/' . $srcDir
+                    : $moduleAbsPath;
+            }
+
             $relativePath = trim($scope, '/') . '/' . $file->getRelativePath();
             $moduleId = IdentityResolver::moduleIdFromPath($relativePath . '/');
+
+            // Fallback: derive module_id from PSR-4 namespace (handles vendor/ paths)
+            if ($moduleId === 'unknown' && !empty($psr4)) {
+                $firstNs = array_key_first($psr4);
+                if ($firstNs !== null) {
+                    $moduleId = IdentityResolver::moduleIdFromClass(rtrim($firstNs, '\\'));
+                }
+            }
 
             if ($moduleId === 'unknown') {
                 continue;
@@ -271,6 +302,36 @@ class ModuleResolver
                 );
             }
         }
+    }
+
+    /**
+     * Resolve a fully-qualified class name to an absolute file path.
+     * Uses PSR-4 directory mappings built from composer.json autoload entries.
+     *
+     * @return string|null Absolute file path, or null if not found
+     */
+    public function resolveClassFile(string $fqcn): ?string
+    {
+        $normalized = IdentityResolver::normalizeFqcn($fqcn);
+
+        // Priority 1: PSR-4 prefix match (longest prefix wins)
+        foreach ($this->psr4Dirs as $prefix => $baseDir) {
+            if (str_starts_with($normalized, $prefix)) {
+                $relative = substr($normalized, strlen($prefix));
+                $filePath = $baseDir . '/' . str_replace('\\', '/', $relative) . '.php';
+                if (is_file($filePath)) {
+                    return $filePath;
+                }
+            }
+        }
+
+        // Priority 2: app/code convention fallback
+        $conventionPath = $this->repoPath . '/app/code/' . str_replace('\\', '/', $normalized) . '.php';
+        if (is_file($conventionPath)) {
+            return $conventionPath;
+        }
+
+        return null;
     }
 
     /**
@@ -320,6 +381,7 @@ class ModuleResolver
                 $nsPrefix = $namespace . '\\';
 
                 $this->psr4Map[$nsPrefix] = $moduleId;
+                $this->psr4Dirs[$nsPrefix] = $this->repoPath . '/' . $modulePath;
 
                 $this->modules[$moduleId] = [
                     'module_id' => $moduleId,

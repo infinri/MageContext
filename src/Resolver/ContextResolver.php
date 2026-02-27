@@ -15,35 +15,11 @@ class ContextResolver
     }
 
     /**
-     * Load all compiled JSON files into an in-memory index.
+     * Load all compiled JSON and Markdown files into an in-memory index.
      */
     public function load(): void
     {
-        $manifestPath = $this->contextDir . '/manifest.json';
-        if (!is_file($manifestPath)) {
-            throw new \RuntimeException(
-                "No compiled context found at {$this->contextDir}. Run 'compile' first."
-            );
-        }
-
-        $manifest = json_decode(file_get_contents($manifestPath), true);
-
-        foreach ($manifest['files'] ?? [] as $relativePath) {
-            $fullPath = $this->contextDir . '/' . $relativePath;
-            if (!is_file($fullPath)) {
-                continue;
-            }
-
-            $ext = pathinfo($fullPath, PATHINFO_EXTENSION);
-            if ($ext === 'json') {
-                // Use filename as key (strips view directory prefix)
-                $key = pathinfo($relativePath, PATHINFO_FILENAME);
-                $this->index[$key] = json_decode(file_get_contents($fullPath), true);
-            } elseif ($ext === 'md') {
-                $key = pathinfo($relativePath, PATHINFO_FILENAME) . '_md';
-                $this->index[$key] = file_get_contents($fullPath);
-            }
-        }
+        $this->index = BundleLoader::load($this->contextDir, true);
     }
 
     /**
@@ -79,6 +55,14 @@ class ContextResolver
         $result['layer_violations'] = $this->findRelevantLayerViolations($keywords);
         $result['architectural_debt'] = $this->findRelevantDebt($keywords);
         $result['modifiability'] = $this->findRelevantModifiability($keywords);
+        $result['call_graph'] = $this->findRelevantCallGraph($keywords);
+        $result['service_contracts'] = $this->findRelevantServiceContracts($keywords);
+        $result['repository_patterns'] = $this->findRelevantRepositoryPatterns($keywords);
+        $result['entity_relationships'] = $this->findRelevantEntityRelationships($keywords);
+        $result['plugin_seam_timing'] = $this->findRelevantPluginSeams($keywords);
+        $result['safe_api_matrix'] = $this->findRelevantSafeApiMatrix($keywords);
+        $result['dto_data_interfaces'] = $this->findRelevantDtoInterfaces($keywords);
+        $result['implementation_patterns'] = $this->findRelevantImplementationPatterns($keywords);
 
         // Filter out empty sections
         return array_filter($result, fn($v) => !empty($v));
@@ -147,19 +131,19 @@ class ContextResolver
     private function findRelevantModules(array $keywords): array
     {
         $modules = $this->index['modules']['modules'] ?? [];
-        return $this->filterByKeywords($modules, $keywords, ['name', 'path']);
+        return BundleLoader::filterRecords($modules, $keywords, ['name', 'path']);
     }
 
     private function findRelevantPreferences(array $keywords): array
     {
         $resolutions = $this->index['di_resolution_map']['resolutions'] ?? [];
-        return $this->filterByKeywords($resolutions, $keywords, ['interface', 'di_target_id']);
+        return BundleLoader::filterRecords($resolutions, $keywords, ['interface', 'di_target_id']);
     }
 
     private function findRelevantPlugins(array $keywords): array
     {
         $plugins = $this->index['plugin_chains']['plugins'] ?? [];
-        $matched = $this->filterByKeywords($plugins, $keywords, ['target_class', 'plugin_class', 'plugin_name', 'source_file']);
+        $matched = BundleLoader::filterRecords($plugins, $keywords, ['target_class', 'plugin_class', 'plugin_name', 'source_file']);
 
         // Also include chain view for matched target classes
         $classChains = $this->index['plugin_chains']['class_chains'] ?? [];
@@ -181,19 +165,19 @@ class ContextResolver
     private function findRelevantObservers(array $keywords): array
     {
         $observers = $this->index['event_graph']['observers'] ?? [];
-        return $this->filterByKeywords($observers, $keywords, ['event_name', 'observer_class', 'observer_name', 'source_file']);
+        return BundleLoader::filterRecords($observers, $keywords, ['event_name', 'observer_class', 'observer_name', 'source_file']);
     }
 
     private function findRelevantLayout(array $keywords): array
     {
         $handles = $this->index['layout_handles']['handles'] ?? [];
-        return $this->filterByKeywords($handles, $keywords, ['handle', 'name', 'class', 'template', 'source_file']);
+        return BundleLoader::filterRecords($handles, $keywords, ['handle', 'name', 'class', 'template', 'source_file']);
     }
 
     private function findRelevantRoutes(array $keywords): array
     {
         $routes = $this->index['route_map']['routes'] ?? [];
-        return $this->filterByKeywords($routes, $keywords, ['route_id', 'front_name', 'source_file']);
+        return BundleLoader::filterRecords($routes, $keywords, ['route_id', 'front_name', 'source_file']);
     }
 
     private function findRelevantDbSchema(array $keywords): array
@@ -202,8 +186,8 @@ class ContextResolver
         $patches = $this->index['db_schema_patches']['patches'] ?? [];
 
         return [
-            'tables' => $this->filterByKeywords($tables, $keywords, ['name', 'comment', 'source_file']),
-            'patches' => $this->filterByKeywords($patches, $keywords, ['class', 'source_file']),
+            'tables' => BundleLoader::filterRecords($tables, $keywords, ['name', 'comment', 'source_file']),
+            'patches' => BundleLoader::filterRecords($patches, $keywords, ['class', 'source_file']),
         ];
     }
 
@@ -213,69 +197,91 @@ class ContextResolver
         $graphql = $this->index['api_surface']['graphql_types'] ?? [];
 
         return [
-            'rest' => $this->filterByKeywords($rest, $keywords, ['url', 'service_class', 'service_method', 'source_file']),
-            'graphql' => $this->filterByKeywords($graphql, $keywords, ['name', 'resolver_class', 'source_file']),
+            'rest' => BundleLoader::filterRecords($rest, $keywords, ['url', 'service_class', 'service_method', 'source_file']),
+            'graphql' => BundleLoader::filterRecords($graphql, $keywords, ['name', 'resolver_class', 'source_file']),
         ];
     }
 
     private function findRelevantDeviations(array $keywords): array
     {
         $deviations = $this->index['custom_deviations']['deviations'] ?? [];
-        return $this->filterByKeywords($deviations, $keywords, ['message', 'source_file', 'type']);
+        return BundleLoader::filterRecords($deviations, $keywords, ['message', 'source_file', 'type']);
     }
 
     private function findRelevantExecutionPaths(array $keywords): array
     {
         $paths = $this->index['execution_paths']['paths'] ?? [];
-        return $this->filterByKeywords($paths, $keywords, ['entry_class', 'module', 'scenario']);
+        return BundleLoader::filterRecords($paths, $keywords, ['entry_class', 'module', 'scenario']);
     }
 
     private function findRelevantLayerViolations(array $keywords): array
     {
         $violations = $this->index['layer_classification']['violations'] ?? [];
-        return $this->filterByKeywords($violations, $keywords, ['from', 'to', 'module']);
+        return BundleLoader::filterRecords($violations, $keywords, ['from', 'to', 'module']);
     }
 
     private function findRelevantDebt(array $keywords): array
     {
         $items = $this->index['architectural_debt']['debt_items'] ?? [];
-        return $this->filterByKeywords($items, $keywords, ['description', 'modules']);
+        return BundleLoader::filterRecords($items, $keywords, ['description', 'modules']);
     }
 
     private function findRelevantModifiability(array $keywords): array
     {
         $modules = $this->index['modifiability']['modules'] ?? [];
-        return $this->filterByKeywords($modules, $keywords, ['module']);
+        return BundleLoader::filterRecords($modules, $keywords, ['module']);
     }
 
-    /**
-     * Filter an array of records by checking if any keyword matches any of the specified fields.
-     *
-     * @param array<array> $records
-     * @param array<string> $keywords
-     * @param array<string> $fields Fields to search within each record
-     * @return array<array> Matching records
-     */
-    private function filterByKeywords(array $records, array $keywords, array $fields): array
+    private function findRelevantCallGraph(array $keywords): array
     {
-        $matched = [];
+        $chains = $this->index['call_graph']['delegation_chains'] ?? [];
+        return BundleLoader::filterRecords($chains, $keywords, ['service_interface', 'final_concrete', 'module', 'url']);
+    }
 
-        foreach ($records as $record) {
-            foreach ($fields as $field) {
-                $value = $record[$field] ?? '';
-                if (!is_string($value)) {
-                    continue;
-                }
+    private function findRelevantServiceContracts(array $keywords): array
+    {
+        $contracts = $this->index['service_contracts']['contracts'] ?? [];
+        return BundleLoader::filterRecords($contracts, $keywords, ['interface', 'module', 'source_file']);
+    }
 
-                foreach ($keywords as $keyword) {
-                    if (stripos($value, $keyword) !== false) {
-                        $matched[] = $record;
-                        continue 3;
-                    }
-                }
-            }
-        }
+    private function findRelevantRepositoryPatterns(array $keywords): array
+    {
+        $repos = $this->index['repository_patterns']['repositories'] ?? [];
+        return BundleLoader::filterRecords($repos, $keywords, ['interface', 'entity_name', 'module', 'source_file']);
+    }
 
-        return $matched;
+    private function findRelevantEntityRelationships(array $keywords): array
+    {
+        $entities = $this->index['entity_relationships']['entities'] ?? [];
+        $relationships = $this->index['entity_relationships']['relationships'] ?? [];
+
+        return [
+            'entities' => BundleLoader::filterRecords($entities, $keywords, ['entity_class', 'table', 'module']),
+            'relationships' => BundleLoader::filterRecords($relationships, $keywords, ['from_table', 'to_table', 'from_entity', 'to_entity']),
+        ];
+    }
+
+    private function findRelevantPluginSeams(array $keywords): array
+    {
+        $seams = $this->index['plugin_seam_timing']['seams'] ?? [];
+        return BundleLoader::filterRecords($seams, $keywords, ['target_class', 'target_method', 'seam_id']);
+    }
+
+    private function findRelevantSafeApiMatrix(array $keywords): array
+    {
+        $matrix = $this->index['safe_api_matrix']['class_matrix'] ?? [];
+        return BundleLoader::filterRecords($matrix, $keywords, ['class', 'module', 'source_file']);
+    }
+
+    private function findRelevantDtoInterfaces(array $keywords): array
+    {
+        $dtos = $this->index['dto_data_interfaces']['data_interfaces'] ?? [];
+        return BundleLoader::filterRecords($dtos, $keywords, ['interface', 'module', 'source_file']);
+    }
+
+    private function findRelevantImplementationPatterns(array $keywords): array
+    {
+        $impls = $this->index['implementation_patterns']['implementations'] ?? [];
+        return BundleLoader::filterRecords($impls, $keywords, ['interface', 'concrete_class', 'module', 'source_file']);
     }
 }

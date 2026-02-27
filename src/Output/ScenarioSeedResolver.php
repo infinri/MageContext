@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MageContext\Output;
 
+use MageContext\Util\ArrayUtil;
+
 /**
  * B+.5: Single source of truth for scenario seeds.
  *
@@ -115,20 +117,10 @@ class ScenarioSeedResolver
     {
         ksort($data);
         foreach ($data as &$value) {
-            if (is_array($value) && self::isAssoc($value)) {
+            if (is_array($value) && ArrayUtil::isAssoc($value)) {
                 self::recursiveKsort($value);
             }
         }
     }
 
-    /**
-     * Check if an array is associative.
-     */
-    private static function isAssoc(array $arr): bool
-    {
-        if ($arr === []) {
-            return false;
-        }
-        return array_keys($arr) !== range(0, count($arr) - 1);
-    }
 }

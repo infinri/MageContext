@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MageContext\Tests\Hardening;
 
 use MageContext\Output\OutputWriter;
+use MageContext\Tests\Support\TempDirectoryTrait;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,12 +17,11 @@ use PHPUnit\Framework\TestCase;
  */
 class DeterminismTest extends TestCase
 {
-    private string $tmpDir;
+    use TempDirectoryTrait;
 
     protected function setUp(): void
     {
-        $this->tmpDir = sys_get_temp_dir() . '/magecontext-determinism-' . uniqid();
-        mkdir($this->tmpDir, 0755, true);
+        $this->createTmpDir('determinism');
     }
 
     protected function tearDown(): void
@@ -227,18 +227,4 @@ class DeterminismTest extends TestCase
         $this->assertSame(['a_inner', 'z_inner'], $innerKeys, 'Nested keys must be sorted');
     }
 
-    private function removeDir(string $dir): void
-    {
-        if (!is_dir($dir)) {
-            return;
-        }
-        $items = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
-        );
-        foreach ($items as $item) {
-            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
-        }
-        rmdir($dir);
-    }
 }

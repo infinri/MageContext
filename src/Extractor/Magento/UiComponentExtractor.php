@@ -60,8 +60,8 @@ class UiComponentExtractor extends AbstractExtractor
             'components' => $components,
             'summary' => [
                 'total_components' => count($components),
-                'by_type' => $this->countByType($components),
-                'by_area' => $this->countByArea($components),
+                'by_type' => $this->countByField($components, 'type'),
+                'by_area' => $this->countByField($components, 'area'),
             ],
         ];
     }
@@ -76,6 +76,7 @@ class UiComponentExtractor extends AbstractExtractor
 
         $componentName = pathinfo($filePath, PATHINFO_FILENAME);
         $rootTag = $xml->getName();
+        $evidence = Evidence::fromXml($fileId, "UI component '{$componentName}'")->toArray();
 
         $component = [
             'name' => $componentName,
@@ -87,6 +88,7 @@ class UiComponentExtractor extends AbstractExtractor
             'columns' => [],
             'fieldsets' => [],
             'buttons' => [],
+            'evidence' => [$evidence],
         ];
 
         // Extract dataSource references
@@ -141,37 +143,4 @@ class UiComponentExtractor extends AbstractExtractor
         return $component;
     }
 
-    private function detectArea(string $relativePath): string
-    {
-        $normalized = str_replace('\\', '/', $relativePath);
-        if (str_contains($normalized, '/adminhtml/')) {
-            return 'adminhtml';
-        }
-        if (str_contains($normalized, '/frontend/')) {
-            return 'frontend';
-        }
-        return 'base';
-    }
-
-    private function countByType(array $components): array
-    {
-        $counts = [];
-        foreach ($components as $c) {
-            $type = $c['type'];
-            $counts[$type] = ($counts[$type] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
-
-    private function countByArea(array $components): array
-    {
-        $counts = [];
-        foreach ($components as $c) {
-            $area = $c['area'];
-            $counts[$area] = ($counts[$area] ?? 0) + 1;
-        }
-        arsort($counts);
-        return $counts;
-    }
 }

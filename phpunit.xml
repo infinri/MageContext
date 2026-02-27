@@ -6,6 +6,9 @@
          failOnWarning="true"
          failOnRisky="true">
     <testsuites>
+        <testsuite name="acceptance">
+            <directory>tests/Acceptance</directory>
+        </testsuite>
         <testsuite name="hardening">
             <directory>tests/Hardening</directory>
         </testsuite>

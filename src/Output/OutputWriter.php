@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MageContext\Output;
 
+use MageContext\Util\ArrayUtil;
+
 use MageContext\Application;
 use MageContext\Config\Schema;
 use MageContext\Identity\WarningCollector;
@@ -326,7 +328,7 @@ class OutputWriter
         }
 
         // Check if this is an associative array (object) or sequential (list)
-        if ($this->isAssoc($data)) {
+        if (ArrayUtil::isAssoc($data)) {
             // Sort known list keys by their explicit sort fields
             foreach ($data as $key => $value) {
                 $data[$key] = $this->normalize($value);
@@ -424,17 +426,6 @@ class OutputWriter
         }
 
         return null;
-    }
-
-    /**
-     * Check if an array is associative (object-like) vs sequential (list-like).
-     */
-    private function isAssoc(array $arr): bool
-    {
-        if ($arr === []) {
-            return false;
-        }
-        return array_keys($arr) !== range(0, count($arr) - 1);
     }
 
     private function ensureDir(string $dir): void
