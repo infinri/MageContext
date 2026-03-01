@@ -159,7 +159,7 @@ class GuideResolver
 
         // DI resolutions in this area
         $resolutions = $this->index['di_resolution_map']['resolutions'] ?? [];
-        $matchedPrefs = $this->filterByKeywords($resolutions, $areas, ['interface', 'di_target_id']);
+        $matchedPrefs = BundleLoader::filterRecords($resolutions, $areas, ['interface', 'di_target_id']);
 
         if (!empty($matchedPrefs)) {
             $points['preferences'] = [
@@ -167,8 +167,8 @@ class GuideResolver
                 'count' => count($matchedPrefs),
                 'items' => array_map(fn($p) => [
                     'interface' => $p['interface'],
-                    'preference' => $p['preference'],
-                    'scope' => $p['scope'],
+                    'preference' => $p['per_area']['global']['final_resolved_type'] ?? $p['preference'] ?? '',
+                    'scope' => !empty($p['per_area']) ? implode(', ', array_keys($p['per_area'])) : ($p['scope'] ?? 'unknown'),
                 ], $matchedPrefs),
             ];
         }

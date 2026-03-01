@@ -302,7 +302,10 @@ class PackCommand extends Command
             foreach ($keys as $key) {
                 $val = $row[$key] ?? '';
                 if (is_array($val)) {
-                    $val = implode(', ', $val);
+                    $val = implode(', ', array_map(
+                        fn($v) => is_array($v) ? json_encode($v, JSON_UNESCAPED_SLASHES) : (string) $v,
+                        $val
+                    ));
                 }
                 $val = str_replace('|', '\\|', (string) $val);
                 if (strlen($val) > 80) {
